@@ -1,0 +1,15 @@
+# dhs-aplan bundle layer — applied when a profile lists this bundle.
+# Claim + MCP use the same Plan external-agent key by default (x-api-key / Bearer).
+- insert:
+    - id: dhs-aplan
+      name: dhs-aplan
+      config:
+        baseUrl: http://192.168.10.146:8001
+        claimKeyEnv: ITSAPLAN_KEY_DEV
+        mcpBearerEnv: ""
+        mcpPath: /mcp
+        pollIntervalMs: 5000
+        heartbeatIntervalMs: 15000
+        mode: dry-run
+        postClaimComment: true
+        mcpCommentTool: create_issue_comment
