@@ -32,10 +32,11 @@ export async function mountPlanMcpTools(
   config: Config,
   log: LogFn,
 ): Promise<void> {
-  if (!config.mountPlanMcp) {
+  if (config.mountPlanMcp === false) {
     log('[dhs-aplan] mountPlanMcp=false; skipping Plan MCP tools')
     return
   }
+  log(`[dhs-aplan] mounting Plan MCP tools baseUrl=${config.baseUrl} mcpPath=${config.mcpPath}`)
 
   const marked = agentCtx as Context & { [MOUNTED]?: boolean }
   if (marked[MOUNTED]) {
@@ -129,24 +130,34 @@ export async function mountPlanMcpTools(
 }
 
 async function loadCreateMcpToolDefinition(): Promise<CreateMcpToolDefinition | null> {
+  // Desktop loads plugins from a generation folder; bare import() cannot see app.asar deps.
+  // Prefer createRequire against the installed Desktop asar, then fall back to import().
+  const asarCandidates = [
+    'C:/Program Files/DSH Desktop/resources/app.asar/package.json',
+    'C:/Program Files/DSH Desktop/resources/app.asar/node_modules/@deepseek-ai/dsh-mcp-client/package.json',
+  ]
+  try {
+    const { createRequire } = await import('node:module')
+    for (const candidate of asarCandidates) {
+      try {
+        const require = createRequire(candidate)
+        const mod = require('@deepseek-ai/dsh-mcp-client') as {
+          createMcpToolDefinition?: CreateMcpToolDefinition
+        }
+        if (typeof mod.createMcpToolDefinition === 'function') {
+          return mod.createMcpToolDefinition
+        }
+      } catch {
+        /* try next */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
   try {
     const mod = (await import(
       /* webpackIgnore: true */ '@deepseek-ai/dsh-mcp-client'
     )) as { createMcpToolDefinition?: CreateMcpToolDefinition }
-    if (typeof mod.createMcpToolDefinition === 'function') {
-      return mod.createMcpToolDefinition
-    }
-  } catch {
-    /* try createRequire from Desktop asar below */
-  }
-  try {
-    const { createRequire } = await import('node:module')
-    const require = createRequire(
-      'C:/Program Files/DSH Desktop/resources/app.asar/package.json',
-    )
-    const mod = require('@deepseek-ai/dsh-mcp-client') as {
-      createMcpToolDefinition?: CreateMcpToolDefinition
-    }
     if (typeof mod.createMcpToolDefinition === 'function') {
       return mod.createMcpToolDefinition
     }
