@@ -1,6 +1,6 @@
-# dhs-aplan bundle layer — applied when a profile lists this bundle.
+﻿# dhs-aplan bundle layer — applied when a profile lists this bundle.
 # Claim + MCP use the same Plan external-agent key by default (x-api-key / Bearer).
-# Default mode stays dry-run; switch to harness after verifying claim/MCP.
+# Local install for Charles: harness mode on (dry-run already verified).
 - insert:
     - id: dhs-aplan
       name: dhs-aplan
@@ -11,10 +11,10 @@
         mcpPath: /mcp
         pollIntervalMs: 5000
         heartbeatIntervalMs: 15000
-        mode: dry-run
+        mode: harness
         postClaimComment: true
         mcpCommentTool: create_issue_comment
-        cwd: ""
+        cwd: "E:\\WorkSpaces\\aida700-ERP"
         provider: ""
         model: ""
         sessionIdPrefix: dhs-aplan-
