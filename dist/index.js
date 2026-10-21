@@ -1,30 +1,101 @@
-import { defaultConfig } from './config.js';
-import { DevRoleRunner } from './runner.js';
+import { defaultConfig, resolveRoles } from './config.js';
+import { RoleRunner } from './runner.js';
+import { ConfigSchema } from './schema.js';
 export const name = 'dhs-aplan';
 /** Cordis: agents required; workspaceRegistry used to attach sessions into the UI workspace tree. */
 export const inject = ['agents', 'workspaceRegistry'];
-/** Cordis may inject config from cordis.patch.yml `config:` on this row. */
+/** Schema-backed volatile config → served to the GUI page by dsh-settings. */
+export const Config = ConfigSchema;
+/** How often live (volatile) config is re-read to reconcile role runners. */
+const RECONCILE_MS = 3000;
+/**
+ * Supervisor: one RoleRunner per enabled role. GUI edits land on the volatile config
+ * reference; a role whose resolved config changed is stopped and restarted (an idle
+ * runner restarts immediately; a busy one reports its run failed first).
+ */
 export function apply(ctx, rawConfig = {}) {
-    const config = { ...defaultConfig, ...rawConfig };
-    const runner = new DevRoleRunner(ctx, config, (msg) => console.log(msg));
+    const log = (msg) => console.log(msg);
+    const runners = new Map();
+    let disposed = false;
+    const read = () => {
+        try {
+            return resolveRoles(snapshot(rawConfig));
+        }
+        catch (err) {
+            log(`[dhs-aplan] config error: ${err instanceof Error ? err.message : String(err)}`);
+            return [];
+        }
+    };
+    const reconcile = async () => {
+        if (disposed)
+            return;
+        const wanted = new Map();
+        for (const cfg of read())
+            wanted.set(cfg.roleKey || '_', cfg);
+        for (const [key, entry] of runners) {
+            const next = wanted.get(key);
+            if (!next || JSON.stringify(next) !== entry.sig) {
+                runners.delete(key);
+                await entry.runner.stop(next ? 'config changed' : 'role removed/disabled');
+            }
+        }
+        for (const [key, cfg] of wanted) {
+            if (runners.has(key) || disposed)
+                continue;
+            const runner = new RoleRunner(ctx, cfg, log);
+            runners.set(key, { sig: JSON.stringify(cfg), runner });
+            void runner.start();
+        }
+    };
     ctx.effect(() => {
-        let cancelled = false;
-        const started = (async () => {
-            // Defer one tick so sibling plugins finish mounting.
-            await Promise.resolve();
-            if (cancelled)
-                return;
-            await runner.loop();
-        })();
-        started.catch((err) => {
-            console.error('[dhs-aplan] runner crashed:', err);
-        });
+        // Defer one tick so sibling plugins finish mounting.
+        const first = setTimeout(() => void reconcile(), 0);
+        const timer = setInterval(() => void reconcile(), RECONCILE_MS);
         return () => {
-            cancelled = true;
-            runner.stop();
-            console.log('[dhs-aplan] DISPOSED — claim loop stop requested');
+            disposed = true;
+            clearTimeout(first);
+            clearInterval(timer);
+            for (const { runner } of runners.values())
+                void runner.stop('plugin disposed');
+            runners.clear();
+            console.log('[dhs-aplan] DISPOSED — claim loops stop requested');
         };
     });
-    console.log(`[dhs-aplan] 开发 MVP loaded mode=${config.mode} baseUrl=${config.baseUrl} claimKeyEnv=${config.claimKeyEnv}`);
+    const roles = read();
+    console.log(`[dhs-aplan] 0.3 loaded roles=${roles.map((r) => `${r.role}:${r.mode}`).join(',') || '(none)'} baseUrl=${roles[0]?.baseUrl ?? defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'}`);
 }
-export { defaultConfig };
+/**
+ * Plain copy of the config. `.volatile()` schema fields arrive as live references
+ * (`{ get(), [cosmokit.volatile.write] }`); read each through `get()` so GUI edits
+ * are seen on every reconcile tick.
+ */
+function snapshot(raw) {
+    const out = {};
+    const src = (raw ?? {});
+    for (const key of Object.keys(src))
+        out[key] = plain(unref(src[key]));
+    return out;
+}
+function unref(v) {
+    if (v && typeof v === 'object' && !Array.isArray(v) && typeof v.get === 'function') {
+        try {
+            return v.get();
+        }
+        catch {
+            return undefined;
+        }
+    }
+    return v;
+}
+function plain(v) {
+    if (Array.isArray(v))
+        return v.map((x) => plain(unref(x)));
+    if (v && typeof v === 'object') {
+        const o = {};
+        for (const k of Object.keys(v))
+            o[k] = plain(unref(v[k]));
+        return o;
+    }
+    return v;
+}
+export { defaultConfig, resolveRoles };

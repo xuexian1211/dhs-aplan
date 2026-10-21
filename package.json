@@ -1,12 +1,14 @@
 {
   "name": "dhs-aplan",
-  "version": "0.2.3",
-  "description": "Its a Plan External Agent bridge for DeepSeek Harness (dev role MVP).",
+  "version": "0.3.0",
+  "description": "Its a Plan External Agent bridge for DeepSeek Harness (multi-role runners, CodexHub-style session titles, in-app settings page).",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -16,11 +18,20 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ],
+      "platform": "web"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').copyFileSync('client/client.js','dist/client.js')\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:title": "node scripts/test-title.mjs"
   },
   "dependencies": {},
   "peerDependencies": {},

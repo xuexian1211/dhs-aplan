@@ -2,55 +2,54 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { SessionId } from '@deepseek-ai/dsh-session';
 import path from 'node:path';
 import { mountPlanMcpTools } from './plan-mcp-tools.js';
+import { sessionTitleForRun } from './title.js';
 /** Side-effect imports so Context gains `agents` / `systemPrompt` typings. */
 import '@deepseek-ai/dsh-agent';
 import '@deepseek-ai/dsh-system-prompt';
 const PLAN_SYSTEM_SECTION = 'dhs-aplan:plan-system-prompt';
-export async function runHarnessTurn(ctx, config, run, log) {
+export async function runHarnessTurn(ctx, config, run, log, options = {}) {
     if (typeof ctx.agents?.create !== 'function') {
         throw new Error('dhs-aplan mode=harness requires ctx.agents (load @deepseek-ai/dsh-agent + dsh-agent-loop in the profile)');
     }
+    const tag = config.roleKey ? `[dhs-aplan:${config.roleKey}]` : '[dhs-aplan]';
     const sessionId = SessionId(buildSessionId(config, run));
-    const agentOptions = buildAgentOptions(ctx, config, log);
+    const agentOptions = buildAgentOptions(ctx, config, log, tag);
     const meta = buildSessionMeta(config);
+    const setup = async (agentCtx) => {
+        installPlanSystemPrompt(agentCtx, run);
+        await mountPlanMcpTools(agentCtx, config, log);
+    };
     let handle;
     let agent;
     let createdFresh = false;
     const live = ctx.agents.get(sessionId);
     if (config.reuseSessionPerIssue && live) {
-        log(`[dhs-aplan] harness reuse live session=${sessionId}`);
+        log(`${tag} harness reuse live session=${sessionId}`);
         agent = live;
-        installPlanSystemPrompt(agent.ctx, run);
-        await mountPlanMcpTools(agent.ctx, config, log);
+        await setup(agent.ctx);
     }
     else if (config.reuseSessionPerIssue) {
         try {
             handle = await ctx.agents.resume({
                 resumeSessionId: sessionId,
                 ...(agentOptions ? { agentOptions } : {}),
-                setup: async (agentCtx) => {
-                    installPlanSystemPrompt(agentCtx, run);
-                    await mountPlanMcpTools(agentCtx, config, log);
-                },
+                setup,
             });
             agent = handle.agent;
-            log(`[dhs-aplan] harness resumed session=${sessionId}`);
+            log(`${tag} harness resumed session=${sessionId}`);
         }
         catch (resumeErr) {
             const reason = resumeErr instanceof Error ? resumeErr.message : String(resumeErr);
-            log(`[dhs-aplan] harness resume skipped (${reason}); creating session=${sessionId}`);
+            log(`${tag} harness resume skipped (${reason}); creating session=${sessionId}`);
             handle = await ctx.agents.create({
                 sessionId,
                 ...(agentOptions ? { agentOptions } : {}),
                 ...(meta ? { meta } : {}),
-                setup: async (agentCtx) => {
-                    installPlanSystemPrompt(agentCtx, run);
-                    await mountPlanMcpTools(agentCtx, config, log);
-                },
+                setup,
             });
             agent = handle.agent;
             createdFresh = true;
-            log(`[dhs-aplan] harness created session=${sessionId}`);
+            log(`${tag} harness created session=${sessionId}`);
         }
     }
     else {
@@ -58,33 +57,56 @@ export async function runHarnessTurn(ctx, config, run, log) {
             sessionId,
             ...(agentOptions ? { agentOptions } : {}),
             ...(meta ? { meta } : {}),
-            setup: async (agentCtx) => {
-                installPlanSystemPrompt(agentCtx, run);
-                await mountPlanMcpTools(agentCtx, config, log);
-            },
+            setup,
         });
         agent = handle.agent;
         createdFresh = true;
-        log(`[dhs-aplan] harness created session=${sessionId}`);
+        log(`${tag} harness created session=${sessionId}`);
+    }
+    if (config.setSessionTitle && (createdFresh || config.renameExistingSession)) {
+        applySessionTitle(ctx, agent, sessionTitleForRun(run, config.role), String(sessionId), log, tag);
     }
     // meta.cwd alone only places the session under the path bucket; UI grouping needs attachSession.
     if (meta?.cwd) {
-        await ensureWorkspaceAttached(ctx, String(sessionId), meta.cwd, log);
+        await ensureWorkspaceAttached(ctx, String(sessionId), meta.cwd, log, tag);
     }
     else if (createdFresh) {
-        log('[dhs-aplan] no config.cwd; session will stay under 未分组 unless the profile sets cwd');
+        log(`${tag} no config.cwd; session will stay ungrouped unless the profile sets cwd`);
     }
     let turnError;
     const stopErrorWatch = watchAgentError(agent, (error) => {
         turnError = error;
     });
+    let timer;
+    let onAbort;
     try {
         agent.followup(createUserMessage({
             content: [{ type: 'text', text: run.prompt }],
             source: { kind: 'user' },
         }));
-        log(`[dhs-aplan] harness followup queued run=${run.id} session=${sessionId}`);
-        await agent.whenIdle();
+        log(`${tag} harness followup queued run=${run.id} session=${sessionId}`);
+        const stoppers = [];
+        if (config.turnTimeoutMs > 0) {
+            stoppers.push(new Promise((_, reject) => {
+                timer = setTimeout(() => {
+                    interruptAgent(agent, log, tag);
+                    reject(new Error(`harness turn timed out after ${config.turnTimeoutMs}ms`));
+                }, config.turnTimeoutMs);
+            }));
+        }
+        if (options.signal) {
+            stoppers.push(new Promise((_, reject) => {
+                onAbort = () => {
+                    interruptAgent(agent, log, tag);
+                    reject(new Error('dhs-aplan runner stopped during the turn (plugin disposed / config changed)'));
+                };
+                if (options.signal.aborted)
+                    onAbort();
+                else
+                    options.signal.addEventListener('abort', onAbort, { once: true });
+            }));
+        }
+        await Promise.race([agent.whenIdle(), ...stoppers]);
         if (turnError) {
             const message = turnError instanceof Error ? turnError.message : String(turnError);
             throw new Error(`harness session error: ${message}`);
@@ -93,23 +115,27 @@ export async function runHarnessTurn(ctx, config, run, log) {
         if (output.startsWith('[dhs-aplan harness]')) {
             throw new Error(output);
         }
-        log(`[dhs-aplan] harness idle run=${run.id} session=${sessionId} outputChars=${output.length}`);
+        log(`${tag} harness idle run=${run.id} session=${sessionId} outputChars=${output.length}`);
         return output;
     }
     finally {
+        if (timer)
+            clearTimeout(timer);
+        if (onAbort && options.signal)
+            options.signal.removeEventListener('abort', onAbort);
         stopErrorWatch();
         if (config.disposeAfterRun && handle) {
             try {
                 await handle.dispose();
-                log(`[dhs-aplan] harness disposed session=${sessionId}`);
+                log(`${tag} harness disposed session=${sessionId}`);
             }
             catch (disposeErr) {
-                log(`[dhs-aplan] harness dispose failed session=${sessionId}: ${disposeErr instanceof Error ? disposeErr.message : String(disposeErr)}`);
+                log(`${tag} harness dispose failed session=${sessionId}: ${disposeErr instanceof Error ? disposeErr.message : String(disposeErr)}`);
             }
         }
     }
 }
-function buildSessionId(config, run) {
+export function buildSessionId(config, run) {
     const prefix = (config.sessionIdPrefix || 'dhs-aplan-').trim() || 'dhs-aplan-';
     if (config.reuseSessionPerIssue) {
         const key = (run.issueIdentifier && run.issueIdentifier.trim()) ||
@@ -121,7 +147,46 @@ function buildSessionId(config, run) {
 function sanitizeId(raw) {
     return raw.replace(/[^a-zA-Z0-9._:-]+/g, '-').slice(0, 120);
 }
-function buildAgentOptions(ctx, config, log) {
+/**
+ * Pin the session title via @deepseek-ai/dsh-session-title `rename()`.
+ * A user-source title also stops the automatic LLM title (which timed out on AE-69).
+ */
+function applySessionTitle(ctx, agent, title, sessionId, log, tag) {
+    try {
+        const svc = ctx.get?.('sessionTitle');
+        if (!svc || typeof svc.rename !== 'function') {
+            log(`${tag} sessionTitle service unavailable; title not set session=${sessionId}`);
+            return;
+        }
+        const session = agent.session;
+        const current = svc.get?.(session)?.title;
+        if (current === title)
+            return;
+        svc.rename(session, title);
+        log(`${tag} session title set session=${sessionId} title=${title}`);
+    }
+    catch (err) {
+        log(`${tag} session title failed session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
+function interruptAgent(agent, log, tag) {
+    const a = agent;
+    for (const name of ['interrupt', 'abort', 'cancel', 'stop']) {
+        const fn = a[name];
+        if (typeof fn === 'function') {
+            try {
+                ;
+                fn.call(agent);
+                log(`${tag} harness agent.${name}() called`);
+            }
+            catch {
+                /* best effort */
+            }
+            return;
+        }
+    }
+}
+function buildAgentOptions(ctx, config, log, tag) {
     let provider = config.provider.trim();
     let model = config.model.trim();
     if (!provider || !model) {
@@ -131,11 +196,11 @@ function buildAgentOptions(ctx, config, log) {
                 provider = defaults.provider;
             if (!model)
                 model = defaults.model;
-            log(`[dhs-aplan] harness model from agentDefaultModel provider=${provider} model=${model}`);
+            log(`${tag} harness model from agentDefaultModel provider=${provider} model=${model}`);
         }
     }
     if (!provider && !model) {
-        log('[dhs-aplan] harness warning: no provider/model in config and agentDefaultModel missing');
+        log(`${tag} harness warning: no provider/model in config and agentDefaultModel missing`);
         return undefined;
     }
     return {
@@ -145,8 +210,8 @@ function buildAgentOptions(ctx, config, log) {
 }
 function readDefaultModel(ctx) {
     try {
-        const svc = ctx.agentDefaultModel
-            ?? ctx.get?.('agentDefaultModel');
+        const svc = ctx.agentDefaultModel ??
+            ctx.get?.('agentDefaultModel');
         const sel = svc?.currentSelection?.();
         if (!sel?.provider || !sel?.model)
             return undefined;
@@ -165,11 +230,11 @@ function buildSessionMeta(config) {
     }
     return { cwd };
 }
-async function ensureWorkspaceAttached(ctx, sessionId, cwd, log) {
-    const registry = ctx.workspaceRegistry
-        ?? ctx.get?.('workspaceRegistry');
+async function ensureWorkspaceAttached(ctx, sessionId, cwd, log, tag) {
+    const registry = ctx.workspaceRegistry ??
+        ctx.get?.('workspaceRegistry');
     if (!registry || typeof registry.resolveByPath !== 'function') {
-        log('[dhs-aplan] workspaceRegistry unavailable; session stays under 未分组');
+        log(`${tag} workspaceRegistry unavailable; session stays ungrouped`);
         return;
     }
     try {
@@ -177,18 +242,18 @@ async function ensureWorkspaceAttached(ctx, sessionId, cwd, log) {
         if (!entity) {
             const title = path.basename(cwd) || 'workspace';
             entity = await registry.create(cwd, title);
-            log(`[dhs-aplan] created workspace title=${title} path=${cwd}`);
+            log(`${tag} created workspace title=${title} path=${cwd}`);
         }
         const already = entity.record?.sessionIds?.includes(sessionId);
         if (already) {
-            log(`[dhs-aplan] session already on workspace path=${entity.record?.path ?? cwd}`);
+            log(`${tag} session already on workspace path=${entity.record?.path ?? cwd}`);
             return;
         }
         await entity.attachSession(sessionId);
-        log(`[dhs-aplan] attached session=${sessionId} to workspace=${entity.record?.title ?? path.basename(cwd)}`);
+        log(`${tag} attached session=${sessionId} to workspace=${entity.record?.title ?? path.basename(cwd)}`);
     }
     catch (err) {
-        log(`[dhs-aplan] workspace attach failed session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+        log(`${tag} workspace attach failed session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
     }
 }
 function watchAgentError(agent, onError) {

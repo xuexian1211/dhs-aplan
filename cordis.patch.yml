@@ -1,16 +1,19 @@
 # dhs-aplan bundle layer — applied when a profile lists this bundle.
-# Claim + MCP use the same Plan external-agent key by default (x-api-key / Bearer).
-# Local install for Charles: harness mode on (dry-run already verified).
+# All fields are editable in DSH: 插件 → dhs-aplan → 配置 (saved to the profile patch, applied live).
+# Keys are env var NAMES, never key values.
 - insert:
     - id: dhs-aplan
       name: dhs-aplan
       config:
+        enabled: true
         baseUrl: http://192.168.10.146:8001
+        role: 开发
         claimKeyEnv: ITSAPLAN_KEY_DEV
         mcpBearerEnv: ""
         mcpPath: /mcp
         pollIntervalMs: 5000
         heartbeatIntervalMs: 15000
+        turnTimeoutMs: 2700000
         mode: harness
         postClaimComment: true
         mcpCommentTool: create_issue_comment
@@ -21,3 +24,8 @@
         reuseSessionPerIssue: true
         mountPlanMcp: true
         disposeAfterRun: false
+        setSessionTitle: true
+        renameExistingSession: true
+        # Multi-role: leave [] for single role above. Each item inherits the top level.
+        # - { key: review, role: 评审, claimKeyEnv: ITSAPLAN_KEY_REVIEW, mcpBearerEnv: ITSAPLAN_MCP_REVIEW }
+        roles: []
