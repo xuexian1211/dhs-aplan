@@ -10,10 +10,11 @@ export async function runHarnessTurn(ctx, config, run, log) {
         throw new Error('dhs-aplan mode=harness requires ctx.agents (load @deepseek-ai/dsh-agent + dsh-agent-loop in the profile)');
     }
     const sessionId = SessionId(buildSessionId(config, run));
-    const agentOptions = buildAgentOptions(config);
+    const agentOptions = buildAgentOptions(ctx, config, log);
     const meta = buildSessionMeta(config);
     let handle;
     let agent;
+    let createdFresh = false;
     const live = ctx.agents.get(sessionId);
     if (config.reuseSessionPerIssue && live) {
         log(`[dhs-aplan] harness reuse live session=${sessionId}`);
@@ -44,6 +45,7 @@ export async function runHarnessTurn(ctx, config, run, log) {
                 },
             });
             agent = handle.agent;
+            createdFresh = true;
             log(`[dhs-aplan] harness created session=${sessionId}`);
         }
     }
@@ -57,8 +59,20 @@ export async function runHarnessTurn(ctx, config, run, log) {
             },
         });
         agent = handle.agent;
+        createdFresh = true;
         log(`[dhs-aplan] harness created session=${sessionId}`);
     }
+    // meta.cwd alone only places the session under the path bucket; UI grouping needs attachSession.
+    if (meta?.cwd) {
+        await ensureWorkspaceAttached(ctx, String(sessionId), meta.cwd, log);
+    }
+    else if (createdFresh) {
+        log('[dhs-aplan] no config.cwd; session will stay under 未分组 unless the profile sets cwd');
+    }
+    let turnError;
+    const stopErrorWatch = watchAgentError(agent, (error) => {
+        turnError = error;
+    });
     try {
         agent.followup(createUserMessage({
             content: [{ type: 'text', text: run.prompt }],
@@ -66,11 +80,19 @@ export async function runHarnessTurn(ctx, config, run, log) {
         }));
         log(`[dhs-aplan] harness followup queued run=${run.id} session=${sessionId}`);
         await agent.whenIdle();
+        if (turnError) {
+            const message = turnError instanceof Error ? turnError.message : String(turnError);
+            throw new Error(`harness session error: ${message}`);
+        }
         const output = extractAssistantOutput(agent);
+        if (output.startsWith('[dhs-aplan harness]')) {
+            throw new Error(output);
+        }
         log(`[dhs-aplan] harness idle run=${run.id} session=${sessionId} outputChars=${output.length}`);
         return output;
     }
     finally {
+        stopErrorWatch();
         if (config.disposeAfterRun && handle) {
             try {
                 await handle.dispose();
@@ -94,15 +116,40 @@ function buildSessionId(config, run) {
 function sanitizeId(raw) {
     return raw.replace(/[^a-zA-Z0-9._:-]+/g, '-').slice(0, 120);
 }
-function buildAgentOptions(config) {
-    const provider = config.provider.trim();
-    const model = config.model.trim();
-    if (!provider && !model)
+function buildAgentOptions(ctx, config, log) {
+    let provider = config.provider.trim();
+    let model = config.model.trim();
+    if (!provider || !model) {
+        const defaults = readDefaultModel(ctx);
+        if (defaults) {
+            if (!provider)
+                provider = defaults.provider;
+            if (!model)
+                model = defaults.model;
+            log(`[dhs-aplan] harness model from agentDefaultModel provider=${provider} model=${model}`);
+        }
+    }
+    if (!provider && !model) {
+        log('[dhs-aplan] harness warning: no provider/model in config and agentDefaultModel missing');
         return undefined;
+    }
     return {
         ...(provider ? { provider } : {}),
         ...(model ? { model } : {}),
     };
+}
+function readDefaultModel(ctx) {
+    try {
+        const svc = ctx.agentDefaultModel
+            ?? ctx.get?.('agentDefaultModel');
+        const sel = svc?.currentSelection?.();
+        if (!sel?.provider || !sel?.model)
+            return undefined;
+        return { provider: String(sel.provider).trim(), model: String(sel.model).trim() };
+    }
+    catch {
+        return undefined;
+    }
 }
 function buildSessionMeta(config) {
     const cwd = config.cwd.trim();
@@ -112,6 +159,45 @@ function buildSessionMeta(config) {
         throw new Error(`dhs-aplan config.cwd must be an absolute path, got: ${cwd}`);
     }
     return { cwd };
+}
+async function ensureWorkspaceAttached(ctx, sessionId, cwd, log) {
+    const registry = ctx.workspaceRegistry
+        ?? ctx.get?.('workspaceRegistry');
+    if (!registry || typeof registry.resolveByPath !== 'function') {
+        log('[dhs-aplan] workspaceRegistry unavailable; session stays under 未分组');
+        return;
+    }
+    try {
+        let entity = await registry.resolveByPath(cwd);
+        if (!entity) {
+            const title = path.basename(cwd) || 'workspace';
+            entity = await registry.create(cwd, title);
+            log(`[dhs-aplan] created workspace title=${title} path=${cwd}`);
+        }
+        const already = entity.record?.sessionIds?.includes(sessionId);
+        if (already) {
+            log(`[dhs-aplan] session already on workspace path=${entity.record?.path ?? cwd}`);
+            return;
+        }
+        await entity.attachSession(sessionId);
+        log(`[dhs-aplan] attached session=${sessionId} to workspace=${entity.record?.title ?? path.basename(cwd)}`);
+    }
+    catch (err) {
+        log(`[dhs-aplan] workspace attach failed session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
+function watchAgentError(agent, onError) {
+    try {
+        const agentCtx = agent.ctx;
+        if (typeof agentCtx.on !== 'function')
+            return () => { };
+        return agentCtx.on('agent/error', (payload) => {
+            onError(payload?.error ?? payload);
+        });
+    }
+    catch {
+        return () => { };
+    }
 }
 function installPlanSystemPrompt(agentCtx, run) {
     const text = run.systemPrompt?.trim() ?? '';

@@ -1,4 +1,4 @@
-﻿# dhs-aplan bundle layer — applied when a profile lists this bundle.
+# dhs-aplan bundle layer — applied when a profile lists this bundle.
 # Claim + MCP use the same Plan external-agent key by default (x-api-key / Bearer).
 # Local install for Charles: harness mode on (dry-run already verified).
 - insert:
@@ -15,8 +15,8 @@
         postClaimComment: true
         mcpCommentTool: create_issue_comment
         cwd: "E:\\WorkSpaces\\aida700-ERP"
-        provider: ""
-        model: ""
+        provider: openai
+        model: gpt-5.6-terra
         sessionIdPrefix: dhs-aplan-
         reuseSessionPerIssue: true
         disposeAfterRun: false

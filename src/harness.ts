@@ -14,6 +14,20 @@ export type HarnessLogFn = (msg: string) => void
 
 const PLAN_SYSTEM_SECTION = 'dhs-aplan:plan-system-prompt'
 
+type WorkspaceEntity = {
+  record?: { path?: string; title?: string; sessionIds?: string[] }
+  attachSession: (sessionId: string) => Promise<void>
+}
+
+type WorkspaceRegistry = {
+  resolveByPath: (path: string) => Promise<WorkspaceEntity | undefined>
+  create: (path: string, title?: string) => Promise<WorkspaceEntity>
+}
+
+type AgentDefaultModel = {
+  currentSelection: () => { provider: string; model: string; reasoningEffort?: string }
+}
+
 export async function runHarnessTurn(
   ctx: Context,
   config: Config,
@@ -27,11 +41,12 @@ export async function runHarnessTurn(
   }
 
   const sessionId = SessionId(buildSessionId(config, run))
-  const agentOptions = buildAgentOptions(config)
+  const agentOptions = buildAgentOptions(ctx, config, log)
   const meta = buildSessionMeta(config)
 
   let handle: AgentHandle | undefined
   let agent: Agent
+  let createdFresh = false
 
   const live = ctx.agents.get(sessionId)
   if (config.reuseSessionPerIssue && live) {
@@ -61,6 +76,7 @@ export async function runHarnessTurn(
         },
       })
       agent = handle.agent
+      createdFresh = true
       log(`[dhs-aplan] harness created session=${sessionId}`)
     }
   } else {
@@ -73,8 +89,21 @@ export async function runHarnessTurn(
       },
     })
     agent = handle.agent
+    createdFresh = true
     log(`[dhs-aplan] harness created session=${sessionId}`)
   }
+
+  // meta.cwd alone only places the session under the path bucket; UI grouping needs attachSession.
+  if (meta?.cwd) {
+    await ensureWorkspaceAttached(ctx, String(sessionId), meta.cwd, log)
+  } else if (createdFresh) {
+    log('[dhs-aplan] no config.cwd; session will stay under 未分组 unless the profile sets cwd')
+  }
+
+  let turnError: unknown
+  const stopErrorWatch = watchAgentError(agent, (error) => {
+    turnError = error
+  })
 
   try {
     agent.followup(
@@ -85,12 +114,20 @@ export async function runHarnessTurn(
     )
     log(`[dhs-aplan] harness followup queued run=${run.id} session=${sessionId}`)
     await agent.whenIdle()
+    if (turnError) {
+      const message = turnError instanceof Error ? turnError.message : String(turnError)
+      throw new Error(`harness session error: ${message}`)
+    }
     const output = extractAssistantOutput(agent)
+    if (output.startsWith('[dhs-aplan harness]')) {
+      throw new Error(output)
+    }
     log(
       `[dhs-aplan] harness idle run=${run.id} session=${sessionId} outputChars=${output.length}`,
     )
     return output
   } finally {
+    stopErrorWatch()
     if (config.disposeAfterRun && handle) {
       try {
         await handle.dispose()
@@ -121,13 +158,36 @@ function sanitizeId(raw: string): string {
   return raw.replace(/[^a-zA-Z0-9._:-]+/g, '-').slice(0, 120)
 }
 
-function buildAgentOptions(config: Config): AgentOptions | undefined {
-  const provider = config.provider.trim()
-  const model = config.model.trim()
-  if (!provider && !model) return undefined
+function buildAgentOptions(ctx: Context, config: Config, log: HarnessLogFn): AgentOptions | undefined {
+  let provider = config.provider.trim()
+  let model = config.model.trim()
+  if (!provider || !model) {
+    const defaults = readDefaultModel(ctx)
+    if (defaults) {
+      if (!provider) provider = defaults.provider
+      if (!model) model = defaults.model
+      log(`[dhs-aplan] harness model from agentDefaultModel provider=${provider} model=${model}`)
+    }
+  }
+  if (!provider && !model) {
+    log('[dhs-aplan] harness warning: no provider/model in config and agentDefaultModel missing')
+    return undefined
+  }
   return {
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
+  }
+}
+
+function readDefaultModel(ctx: Context): { provider: string; model: string } | undefined {
+  try {
+    const svc = (ctx as Context & { agentDefaultModel?: AgentDefaultModel }).agentDefaultModel
+      ?? (ctx as { get?: (name: string) => AgentDefaultModel | undefined }).get?.('agentDefaultModel')
+    const sel = svc?.currentSelection?.()
+    if (!sel?.provider || !sel?.model) return undefined
+    return { provider: String(sel.provider).trim(), model: String(sel.model).trim() }
+  } catch {
+    return undefined
   }
 }
 
@@ -138,6 +198,57 @@ function buildSessionMeta(config: Config): { cwd: string } | undefined {
     throw new Error(`dhs-aplan config.cwd must be an absolute path, got: ${cwd}`)
   }
   return { cwd }
+}
+
+async function ensureWorkspaceAttached(
+  ctx: Context,
+  sessionId: string,
+  cwd: string,
+  log: HarnessLogFn,
+): Promise<void> {
+  const registry = (ctx as Context & { workspaceRegistry?: WorkspaceRegistry }).workspaceRegistry
+    ?? (ctx as { get?: (name: string) => WorkspaceRegistry | undefined }).get?.('workspaceRegistry')
+  if (!registry || typeof registry.resolveByPath !== 'function') {
+    log('[dhs-aplan] workspaceRegistry unavailable; session stays under 未分组')
+    return
+  }
+  try {
+    let entity = await registry.resolveByPath(cwd)
+    if (!entity) {
+      const title = path.basename(cwd) || 'workspace'
+      entity = await registry.create(cwd, title)
+      log(`[dhs-aplan] created workspace title=${title} path=${cwd}`)
+    }
+    const already = entity.record?.sessionIds?.includes(sessionId)
+    if (already) {
+      log(`[dhs-aplan] session already on workspace path=${entity.record?.path ?? cwd}`)
+      return
+    }
+    await entity.attachSession(sessionId)
+    log(
+      `[dhs-aplan] attached session=${sessionId} to workspace=${entity.record?.title ?? path.basename(cwd)}`,
+    )
+  } catch (err) {
+    log(
+      `[dhs-aplan] workspace attach failed session=${sessionId}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    )
+  }
+}
+
+function watchAgentError(agent: Agent, onError: (error: unknown) => void): () => void {
+  try {
+    const agentCtx = agent.ctx as Context & {
+      on?: (event: string, listener: (payload: { error?: unknown; agent?: Agent }) => void) => () => void
+    }
+    if (typeof agentCtx.on !== 'function') return () => {}
+    return agentCtx.on('agent/error', (payload) => {
+      onError(payload?.error ?? payload)
+    })
+  } catch {
+    return () => {}
+  }
 }
 
 function installPlanSystemPrompt(agentCtx: Context, run: PlanRun): void {

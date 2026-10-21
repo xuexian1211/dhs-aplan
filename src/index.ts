@@ -4,8 +4,8 @@ import { DevRoleRunner } from './runner.js'
 
 export const name = 'dhs-aplan'
 
-/** Cordis: declare service deps so ctx.agents is injectable (not a Proxy throw). */
-export const inject = ['agents'] as const
+/** Cordis: agents required; workspaceRegistry used to attach sessions into the UI workspace tree. */
+export const inject = ['agents', 'workspaceRegistry'] as const
 
 export interface PluginConfig extends Config {}
 

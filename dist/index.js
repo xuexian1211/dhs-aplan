@@ -1,6 +1,8 @@
 import { defaultConfig } from './config.js';
 import { DevRoleRunner } from './runner.js';
 export const name = 'dhs-aplan';
+/** Cordis: agents required; workspaceRegistry used to attach sessions into the UI workspace tree. */
+export const inject = ['agents', 'workspaceRegistry'];
 /** Cordis may inject config from cordis.patch.yml `config:` on this row. */
 export function apply(ctx, rawConfig = {}) {
     const config = { ...defaultConfig, ...rawConfig };
