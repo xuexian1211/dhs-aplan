@@ -8,6 +8,12 @@ export const defaultConfig = {
     mode: 'dry-run',
     postClaimComment: true,
     mcpCommentTool: 'create_issue_comment',
+    cwd: '',
+    provider: '',
+    model: '',
+    sessionIdPrefix: 'dhs-aplan-',
+    reuseSessionPerIssue: true,
+    disposeAfterRun: false,
 };
 export function resolveSecret(envName) {
     const name = envName.trim();

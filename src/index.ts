@@ -1,4 +1,4 @@
-﻿import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import { defaultConfig, type Config } from './config.js'
 import { DevRoleRunner } from './runner.js'
 
@@ -10,7 +10,7 @@ export interface PluginConfig extends Config {}
 export function apply(ctx: Context, rawConfig: Partial<Config> = {}) {
   const config: Config = { ...defaultConfig, ...rawConfig }
 
-  const runner = new DevRoleRunner(config, (msg) => console.log(msg))
+  const runner = new DevRoleRunner(ctx, config, (msg) => console.log(msg))
 
   ctx.effect(() => {
     let cancelled = false

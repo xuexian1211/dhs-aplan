@@ -4,7 +4,7 @@ export const name = 'dhs-aplan';
 /** Cordis may inject config from cordis.patch.yml `config:` on this row. */
 export function apply(ctx, rawConfig = {}) {
     const config = { ...defaultConfig, ...rawConfig };
-    const runner = new DevRoleRunner(config, (msg) => console.log(msg));
+    const runner = new DevRoleRunner(ctx, config, (msg) => console.log(msg));
     ctx.effect(() => {
         let cancelled = false;
         const started = (async () => {

@@ -1,12 +1,15 @@
 import { resolveSecret } from './config.js';
+import { runHarnessTurn } from './harness.js';
 import { McpClient } from './mcp-client.js';
 import { PlanClient } from './plan-client.js';
 export class DevRoleRunner {
+    ctx;
     config;
     log;
     stopped = false;
     busy = false;
-    constructor(config, log = console.log) {
+    constructor(ctx, config, log = console.log) {
+        this.ctx = ctx;
         this.config = config;
         this.log = log;
     }
@@ -71,12 +74,9 @@ export class DevRoleRunner {
                 this.log(`[dhs-aplan] dry-run success run=${run.id}`);
                 return;
             }
-            // harness mode: stub until session dispatch is wired
-            await plan.reportRun(run.id, {
-                status: 'failed',
-                error: 'dhs-aplan mode=harness is not implemented yet; set mode=dry-run or wait for session dispatch.',
-            });
-            this.log(`[dhs-aplan] harness stub failed run=${run.id}`);
+            const output = await runHarnessTurn(this.ctx, this.config, run, this.log);
+            await plan.reportRun(run.id, { status: 'success', output });
+            this.log(`[dhs-aplan] harness success run=${run.id}`);
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);

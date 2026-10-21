@@ -17,13 +17,34 @@ export interface Config {
   heartbeatIntervalMs: number
   /**
    * dry-run: claim → optional MCP comment → report success without Harness turn.
-   * harness: reserved; currently fails the run with a clear error until session dispatch lands.
+   * harness: claim → ctx.agents.create/followup/whenIdle → report result.
    */
   mode: 'dry-run' | 'harness'
   /** When true, post an MCP comment after claim (needs mcpBearerEnv + working tools). */
   postClaimComment: boolean
   /** MCP tool name used to add an issue comment. Override if your Plan MCP differs. */
   mcpCommentTool: string
+  /**
+   * Absolute working directory for the harness session (`meta.cwd`).
+   * Empty = omit (profile / launcher default).
+   */
+  cwd: string
+  /** Optional provider route override for harness agents. Empty = profile default. */
+  provider: string
+  /** Optional model id override for harness agents. Empty = profile default. */
+  model: string
+  /** Prefix for generated session ids (stable id = prefix + issue/run key). */
+  sessionIdPrefix: string
+  /**
+   * When true, reuse one harness session per Plan issue (resume/get by stable id).
+   * When false, each run gets a fresh session id (`…run-<id>`).
+   */
+  reuseSessionPerIssue: boolean
+  /**
+   * When true, dispose the AgentHandle after reporting (removes session from the live store).
+   * Default false so the workbench keeps the conversation visible.
+   */
+  disposeAfterRun: boolean
 }
 
 export const defaultConfig: Config = {
@@ -36,6 +57,12 @@ export const defaultConfig: Config = {
   mode: 'dry-run',
   postClaimComment: true,
   mcpCommentTool: 'create_issue_comment',
+  cwd: '',
+  provider: '',
+  model: '',
+  sessionIdPrefix: 'dhs-aplan-',
+  reuseSessionPerIssue: true,
+  disposeAfterRun: false,
 }
 
 export function resolveSecret(envName: string): string {

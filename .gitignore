@@ -3,3 +3,6 @@
 .env
 .DS_Store
 pnpm-debug.log*
+_dsh_types/
+_tools/
+*.tgz

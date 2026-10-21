@@ -1,5 +1,6 @@
 # dhs-aplan bundle layer — applied when a profile lists this bundle.
 # Claim + MCP use the same Plan external-agent key by default (x-api-key / Bearer).
+# Default mode stays dry-run; switch to harness after verifying claim/MCP.
 - insert:
     - id: dhs-aplan
       name: dhs-aplan
@@ -13,3 +14,9 @@
         mode: dry-run
         postClaimComment: true
         mcpCommentTool: create_issue_comment
+        cwd: ""
+        provider: ""
+        model: ""
+        sessionIdPrefix: dhs-aplan-
+        reuseSessionPerIssue: true
+        disposeAfterRun: false

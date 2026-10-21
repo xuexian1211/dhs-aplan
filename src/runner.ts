@@ -1,5 +1,7 @@
+import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './config.js'
 import { resolveSecret } from './config.js'
+import { runHarnessTurn } from './harness.js'
 import { McpClient } from './mcp-client.js'
 import { PlanClient, type PlanRun } from './plan-client.js'
 
@@ -10,6 +12,7 @@ export class DevRoleRunner {
   private busy = false
 
   constructor(
+    private readonly ctx: Context,
     private readonly config: Config,
     private readonly log: LogFn = console.log,
   ) {}
@@ -84,13 +87,9 @@ export class DevRoleRunner {
         return
       }
 
-      // harness mode: stub until session dispatch is wired
-      await plan.reportRun(run.id, {
-        status: 'failed',
-        error:
-          'dhs-aplan mode=harness is not implemented yet; set mode=dry-run or wait for session dispatch.',
-      })
-      this.log(`[dhs-aplan] harness stub failed run=${run.id}`)
+      const output = await runHarnessTurn(this.ctx, this.config, run, this.log)
+      await plan.reportRun(run.id, { status: 'success', output })
+      this.log(`[dhs-aplan] harness success run=${run.id}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       this.log(`[dhs-aplan] run failed run=${run.id}: ${message}`)
