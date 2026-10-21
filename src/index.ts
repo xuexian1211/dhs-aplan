@@ -4,6 +4,9 @@ import { DevRoleRunner } from './runner.js'
 
 export const name = 'dhs-aplan'
 
+/** Cordis: declare service deps so ctx.agents is injectable (not a Proxy throw). */
+export const inject = ['agents'] as const
+
 export interface PluginConfig extends Config {}
 
 /** Cordis may inject config from cordis.patch.yml `config:` on this row. */
