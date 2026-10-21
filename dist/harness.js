@@ -1,6 +1,7 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { SessionId } from '@deepseek-ai/dsh-session';
 import path from 'node:path';
+import { mountPlanMcpTools } from './plan-mcp-tools.js';
 /** Side-effect imports so Context gains `agents` / `systemPrompt` typings. */
 import '@deepseek-ai/dsh-agent';
 import '@deepseek-ai/dsh-system-prompt';
@@ -20,14 +21,16 @@ export async function runHarnessTurn(ctx, config, run, log) {
         log(`[dhs-aplan] harness reuse live session=${sessionId}`);
         agent = live;
         installPlanSystemPrompt(agent.ctx, run);
+        await mountPlanMcpTools(agent.ctx, config, log);
     }
     else if (config.reuseSessionPerIssue) {
         try {
             handle = await ctx.agents.resume({
                 resumeSessionId: sessionId,
                 ...(agentOptions ? { agentOptions } : {}),
-                setup: (agentCtx) => {
+                setup: async (agentCtx) => {
                     installPlanSystemPrompt(agentCtx, run);
+                    await mountPlanMcpTools(agentCtx, config, log);
                 },
             });
             agent = handle.agent;
@@ -40,8 +43,9 @@ export async function runHarnessTurn(ctx, config, run, log) {
                 sessionId,
                 ...(agentOptions ? { agentOptions } : {}),
                 ...(meta ? { meta } : {}),
-                setup: (agentCtx) => {
+                setup: async (agentCtx) => {
                     installPlanSystemPrompt(agentCtx, run);
+                    await mountPlanMcpTools(agentCtx, config, log);
                 },
             });
             agent = handle.agent;
@@ -54,8 +58,9 @@ export async function runHarnessTurn(ctx, config, run, log) {
             sessionId,
             ...(agentOptions ? { agentOptions } : {}),
             ...(meta ? { meta } : {}),
-            setup: (agentCtx) => {
+            setup: async (agentCtx) => {
                 installPlanSystemPrompt(agentCtx, run);
+                await mountPlanMcpTools(agentCtx, config, log);
             },
         });
         agent = handle.agent;

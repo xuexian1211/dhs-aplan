@@ -7,13 +7,14 @@ export const defaultConfig = {
     heartbeatIntervalMs: 15000,
     mode: 'dry-run',
     postClaimComment: true,
-    mcpCommentTool: 'create_issue_comment',
+    mcpCommentTool: 'add_comment',
     cwd: '',
     provider: '',
     model: '',
     sessionIdPrefix: 'dhs-aplan-',
     reuseSessionPerIssue: true,
     disposeAfterRun: false,
+    mountPlanMcp: true,
 };
 export function resolveSecret(envName) {
     const name = envName.trim();

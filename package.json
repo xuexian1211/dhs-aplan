@@ -1,6 +1,6 @@
 {
   "name": "dhs-aplan",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Its a Plan External Agent bridge for DeepSeek Harness (dev role MVP).",
   "license": "MIT",
   "type": "module",

@@ -45,6 +45,11 @@ export interface Config {
    * Default false so the workbench keeps the conversation visible.
    */
   disposeAfterRun: boolean
+  /**
+   * When true (default), harness agent scopes get Plan MCP tools under native names
+   * (add_comment, get_issue, …) via @deepseek-ai/dsh-mcp-client's tool bridge.
+   */
+  mountPlanMcp: boolean
 }
 
 export const defaultConfig: Config = {
@@ -56,13 +61,14 @@ export const defaultConfig: Config = {
   heartbeatIntervalMs: 15000,
   mode: 'dry-run',
   postClaimComment: true,
-  mcpCommentTool: 'create_issue_comment',
+  mcpCommentTool: 'add_comment',
   cwd: '',
   provider: '',
   model: '',
   sessionIdPrefix: 'dhs-aplan-',
   reuseSessionPerIssue: true,
   disposeAfterRun: false,
+  mountPlanMcp: true,
 }
 
 export function resolveSecret(envName: string): string {
