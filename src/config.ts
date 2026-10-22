@@ -102,6 +102,11 @@ export interface Config {
   archiveSweepMinutes: number
   /** Wait after issue enters completed/canceled before archive (minutes, min 5). */
   archiveGraceMinutes: number
+  /**
+   * On plugin start, repair .runtime ACL under each role cwd (and top cwd).
+   * Windows only. Default true; set false to skip.
+   */
+  fixRuntimeAcl: boolean
 }
 
 /** Raw plugin config as written in cordis.patch.yml / GUI. */
@@ -141,6 +146,7 @@ export const defaultConfig: Config = {
   archiveDryRun: true,
   archiveSweepMinutes: 240,
   archiveGraceMinutes: 30,
+  fixRuntimeAcl: true,
 }
 
 function pick<T>(value: T | undefined | null, fallback: T): T {

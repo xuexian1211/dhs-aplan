@@ -5,6 +5,7 @@ import { RoleRunner } from './runner.js';
 import { ConfigSchema } from './schema.js';
 import { patchStatus, publishRuntimeStatus, removeStatus } from './status.js';
 import { rehydrateAplanSessions } from './rehydrate.js';
+import { fixRuntimeAclForWorkspaces } from './fix-runtime-acl.js';
 export const name = 'dsh-aplan';
 /** Cordis: agents required; workspaceRegistry used to attach sessions into the UI workspace tree. */
 export const inject = ['agents', 'workspaceRegistry'];
@@ -110,6 +111,22 @@ export function apply(ctx, rawConfig = {}) {
     ctx.effect(() => {
         let rehydrated = false;
         const boot = async () => {
+            try {
+                const raw0 = readRaw();
+                const enabled = raw0.fixRuntimeAcl !== false;
+                const cwds = [];
+                if (typeof raw0.cwd === 'string' && raw0.cwd.trim())
+                    cwds.push(raw0.cwd);
+                for (const r of Array.isArray(raw0.roles) ? raw0.roles : []) {
+                    if (r && typeof r === 'object' && typeof r.cwd === 'string' && r.cwd.trim())
+                        cwds.push(r.cwd);
+                }
+                fixRuntimeAclForWorkspaces({ workspaces: cwds, enabled, log });
+            }
+            catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                log('[dsh-aplan] fixRuntimeAcl boot error: ' + msg);
+            }
             await reconcile();
             if (disposed || rehydrated)
                 return;
@@ -135,7 +152,7 @@ export function apply(ctx, rawConfig = {}) {
             console.log('[dsh-aplan] DISPOSED — claim loops stop requested');
         };
     });
-    console.log(`[dsh-aplan] 0.3.18 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
+    console.log(`[dsh-aplan] 0.3.19 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
 }
 function snapshot(raw) {
     const out = {};

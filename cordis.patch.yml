@@ -33,4 +33,5 @@
         archiveDryRun: true
         archiveSweepMinutes: 240
         archiveGraceMinutes: 30
+        fixRuntimeAcl: true
         roles: []

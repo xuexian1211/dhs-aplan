@@ -35,6 +35,7 @@ export const defaultConfig = {
     archiveDryRun: true,
     archiveSweepMinutes: 240,
     archiveGraceMinutes: 30,
+    fixRuntimeAcl: true,
 };
 function pick(value, fallback) {
     if (value === undefined || value === null)

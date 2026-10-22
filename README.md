@@ -96,3 +96,11 @@ Desktop generation 已装时，只把 `dist/`、`package.json`、`cordis.patch.y
 - **连接状态**：设置页顶部与每卡显示 已接入 / 未接入 / 已暂停；关闭「启用」即暂停领取。
 - **推理强度**：reasoningEffort → AgentOptions.reasoningEffort（off/minimal/low/medium/high/xhigh）。
 - **自动归档**：配置项与 CodexHub 对齐；DSH 尚无按 Plan 看板列归档会话 API，开启后仅日志（建议先开「仅演练」）。
+
+## .runtime ACL（Windows）
+
+DSH Low IL / Everyone DENY 会导致 start-all 与 harness 无法写 .runtime。
+
+- 手动：pwsh -File scripts/Fix-runtime-acl.ps1 -Workspace <repo>
+- 说明：[docs/fix-runtime-acl.md](docs/fix-runtime-acl.md)
+- 插件配置 ixRuntimeAcl（默认 true）：启动时对每个角色 cwd 自动修复；设 false 跳过。

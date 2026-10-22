@@ -64,6 +64,7 @@ function build(z: Z): unknown {
     archiveDryRun: b(d.archiveDryRun),
     archiveSweepMinutes: n(d.archiveSweepMinutes),
     archiveGraceMinutes: n(d.archiveGraceMinutes),
+    fixRuntimeAcl: b(d.fixRuntimeAcl),
     roles: z.array(role).default([]).volatile(),
     /** Host-published JSON; GUI reads only. */
     runtimeStatus: s('[]'),

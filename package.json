@@ -1,6 +1,6 @@
 {
   "name": "dsh-aplan",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "private": true,
   "description": "Its a Plan External Agent bridge for DeepSeek Harness (multi-role runners, CodexHub-style session titles, in-app settings page).",
   "license": "MIT",
@@ -14,7 +14,8 @@
   "files": [
     "dist",
     "cordis.patch.yml",
-    "package.json"
+    "package.json",
+    "scripts"
   ],
   "dsh": {
     "bundle": {
