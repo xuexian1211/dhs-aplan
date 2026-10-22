@@ -80,9 +80,9 @@ function base(raw) {
  * No `roles` (or empty) = single top-level runner (back-compat with 0.2.x).
  * Prefer GUI writing roles[0] so multi-role and single-role share one model.
  */
-/** Shipped DSH permission preset ids (see @deepseek-ai/dsh-permission-presets). */
-export const PERMISSION_PRESETS = ['workspace-write', 'danger-full-access'];
-/** Role-key defaults: coding/test roles get full access; planning roles stay standard. */
+/** Shipped DSH permission preset ids (dsh-base: read-only | workspace-write | danger-full-access). */
+export const PERMISSION_PRESETS = ['read-only', 'workspace-write', 'danger-full-access'];
+/** Role-key defaults: coding/test → 完全权限; req/swa/review → 工作区内修改 (prior design). */
 export function defaultPermissionPresetForRoleKey(roleKey) {
     const k = String(roleKey || '').trim().toLowerCase();
     if (k === 'dev' || k === 'test')

@@ -35,8 +35,11 @@ export interface RoleConfig {
   renameExistingSession?: boolean
   /**
    * DSH session permission preset (`ctx.permissionPresets.set`).
-   * Shipped values: `workspace-write` (标准/工作区内修改) | `danger-full-access` (完全权限).
-   * Empty = role-key default (dev/test → danger-full-access; else workspace-write).
+   * Matches DSH Desktop native three levels (dsh-base cordis.patch.yml):
+   *   read-only           → 仅可查看
+   *   workspace-write     → 工作区内修改
+   *   danger-full-access  → 完全权限
+   * Empty = role-key default (dev/test -> danger-full-access; else workspace-write).
    */
   permissionPreset?: string
 }
@@ -202,11 +205,11 @@ function base(raw: RawConfig): Config {
  * Prefer GUI writing roles[0] so multi-role and single-role share one model.
  */
 
-/** Shipped DSH permission preset ids (see @deepseek-ai/dsh-permission-presets). */
-export const PERMISSION_PRESETS = ['workspace-write', 'danger-full-access'] as const
+/** Shipped DSH permission preset ids (dsh-base: read-only | workspace-write | danger-full-access). */
+export const PERMISSION_PRESETS = ['read-only', 'workspace-write', 'danger-full-access'] as const
 export type PermissionPresetId = (typeof PERMISSION_PRESETS)[number]
 
-/** Role-key defaults: coding/test roles get full access; planning roles stay standard. */
+/** Role-key defaults: coding/test → 完全权限; req/swa/review → 工作区内修改 (prior design). */
 export function defaultPermissionPresetForRoleKey(roleKey: string): PermissionPresetId {
   const k = String(roleKey || '').trim().toLowerCase()
   if (k === 'dev' || k === 'test') return 'danger-full-access'

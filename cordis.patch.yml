@@ -34,6 +34,6 @@
         archiveSweepMinutes: 240
         archiveGraceMinutes: 30
         fixRuntimeAcl: true
-        # Session permission preset: workspace-write (标准) | danger-full-access (完全权限)
+        # Session permission preset: read-only (仅可查看) | workspace-write (工作区内修改) | danger-full-access (完全权限)
         permissionPreset: workspace-write
         roles: []

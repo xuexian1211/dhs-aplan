@@ -95,8 +95,9 @@ window.__ModuleLoader__.load({
 			sectionConn: "连接与 Key",
 			sectionRun: "运行",
 			permissionPreset: "会话权限",
-			permissionPresetHint: "对应 DSH 会话权限选择器：标准=工作区内修改（workspace-write），完全权限=danger-full-access。dev/test 默认完全权限，其它角色默认标准。新建/续跑会写入会话。",
-			permissionPresetStandard: "标准（工作区内修改）",
+			permissionPresetHint: "对应 DSH 会话权限三档：仅可查看=read-only，工作区内修改=workspace-write，完全权限=danger-full-access。dev/test 默认完全权限，其它角色默认工作区内修改。新建/续跑会写入会话。",
+			permissionPresetViewOnly: "仅可查看",
+			permissionPresetStandard: "工作区内修改",
 			permissionPresetFull: "完全权限",
 			sectionPermission: "工作区权限",
 			groupConfigIo: "配置导入/导出",
@@ -154,9 +155,10 @@ window.__ModuleLoader__.load({
 			modeHint: "harness = real Agent turn; dry-run = claim/comment then success without a Harness turn (for integration tests).",
 			cwd: "Working directory (absolute, optional)", cwdHint: "Empty = no cwd / session stays ungrouped. Must be absolute when set.",
 			permissionPreset: "Session permission",
-			permissionPresetHint: "Maps to the DSH session permission control: Standard = workspace-write; Full access = danger-full-access. Defaults: dev/test → full; others → standard. Applied on create/reuse.",
-			permissionPresetStandard: "Standard (workspace write)",
-			permissionPresetFull: "Full access",
+			permissionPresetHint: "Maps to DSH session permission: View Only=read-only; Modify within Workspace=workspace-write; Full Permissions=danger-full-access. Defaults: dev/test → full; others → workspace-write. Applied on create/reuse.",
+			permissionPresetViewOnly: "View Only",
+			permissionPresetStandard: "Modify within Workspace",
+			permissionPresetFull: "Full Permissions",
 			sectionPermission: "Workspace permissions",
 			groupConfigIo: "Config import/export",
 			configExport: "Export config",
@@ -729,9 +731,10 @@ function RoleField(props) {
 		}
 
 
-		/** DSH session permission preset: workspace-write (标准) vs danger-full-access (完全权限). */
+		/** DSH session permission preset: read-only | workspace-write | danger-full-access (native three Chinese levels). */
 		function PermissionPresetSelect(props) {
-			const v = props.value === "danger-full-access" ? "danger-full-access" : "workspace-write";
+			const allowed = ["read-only", "workspace-write", "danger-full-access"];
+			const v = allowed.includes(props.value) ? props.value : "workspace-write";
 			return jsxs("label", {
 				style: FIELD,
 				children: [
@@ -753,8 +756,9 @@ function RoleField(props) {
 						disabled: props.disabled,
 						onChange: (e) => props.onChange(e.target.value),
 						children: [
-							selectOption("workspace-write", props.standardLabel || "workspace-write"),
-							selectOption("danger-full-access", props.fullLabel || "danger-full-access"),
+							selectOption("read-only", props.viewOnlyLabel || "仅可查看"),
+							selectOption("workspace-write", props.standardLabel || "工作区内修改"),
+							selectOption("danger-full-access", props.fullLabel || "完全权限"),
 						],
 					}),
 				],
@@ -945,6 +949,7 @@ function RoleField(props) {
 											jsx(PermissionPresetSelect, {
 												label: t("permissionPreset"),
 												hint: t("permissionPresetHint"),
+												viewOnlyLabel: t("permissionPresetViewOnly"),
 												standardLabel: t("permissionPresetStandard"),
 												fullLabel: t("permissionPresetFull"),
 												value: role.permissionPreset || (role.key === "dev" || role.key === "test" ? "danger-full-access" : "workspace-write"),
@@ -1121,7 +1126,7 @@ function RoleField(props) {
 			const roles = Array.isArray(config.roles) ? config.roles : [];
 			for (const r of roles) {
 				if (!r || typeof r !== "object") return { ok: false, error: "role-invalid" };
-				if (r.permissionPreset && r.permissionPreset !== "workspace-write" && r.permissionPreset !== "danger-full-access") {
+				if (r.permissionPreset && r.permissionPreset !== "read-only" && r.permissionPreset !== "workspace-write" && r.permissionPreset !== "danger-full-access") {
 					return { ok: false, error: "bad-permissionPreset" };
 				}
 				if (r.mode && r.mode !== "harness" && r.mode !== "dry-run") return { ok: false, error: "bad-mode" };

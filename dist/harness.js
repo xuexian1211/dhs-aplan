@@ -82,7 +82,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
     // Host tool-fs/bash/pwsh are disabled on the web plane; coding tools live in agent presets.
     // meta.agentPreset covers fresh creates; ensureAgentPreset covers resume/live reuse.
     await ensureAgentPreset(ctx, agent, log, tag);
-    // Session permission / sandbox mode (标准 workspace-write vs 完全权限 danger-full-access).
+    // Session permission / sandbox mode (DSH three levels: read-only | workspace-write | danger-full-access).
     // AE-133 only succeeded after the user set DSH session permission to 完全权限.
     applyPermissionPreset(ctx, agent, config, log, tag);
     let turnError;
@@ -203,8 +203,9 @@ function interruptAgent(agent, log, tag) {
 }
 /**
  * Apply the role's DSH permission preset via `ctx.permissionPresets.set(session, name)`.
- * Bundles sandbox mode + approval policy (see @deepseek-ai/dsh-permission-presets):
- * - workspace-write → sandbox workspace-write + approval ask (标准 / 工作区内修改)
+ * Bundles sandbox mode + approval policy (see @deepseek-ai/dsh-permission-presets / dsh-base):
+ * - read-only → sandbox read-only + approval ask (仅可查看)
+ * - workspace-write → sandbox workspace-write + approval ask (工作区内修改)
  * - danger-full-access → sandbox danger-full-access + approval never (完全权限)
  */
 function applyPermissionPreset(ctx, agent, config, log, tag) {

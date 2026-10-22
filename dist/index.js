@@ -152,7 +152,7 @@ export function apply(ctx, rawConfig = {}) {
             console.log('[dsh-aplan] DISPOSED — claim loops stop requested');
         };
     });
-    console.log(`[dsh-aplan] 0.3.19 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
+    console.log(`[dsh-aplan] 0.3.21 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
 }
 function snapshot(raw) {
     const out = {};

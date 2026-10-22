@@ -180,7 +180,7 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
   })
 
   console.log(
-    `[dsh-aplan] 0.3.19 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
+    `[dsh-aplan] 0.3.21 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
   )
 }
 
