@@ -5,6 +5,7 @@ import { mountPlanMcpTools } from './plan-mcp-tools.js';
 import { sessionTitleForRun } from './title.js';
 import { hostCtx } from './host-ctx.js';
 import { ensureAgentPreset } from './ensure-agent-preset.js';
+import { ensureWorkspaceAttached } from './workspace-attach.js';
 /** Side-effect imports so Context gains `agents` / `systemPrompt` typings. */
 import '@deepseek-ai/dsh-agent';
 import '@deepseek-ai/dsh-system-prompt';
@@ -245,32 +246,6 @@ function buildSessionMeta(config) {
         ...(cwd ? { cwd } : {}),
         agentPreset,
     };
-}
-async function ensureWorkspaceAttached(ctx, sessionId, cwd, log, tag) {
-    const registry = ctx.workspaceRegistry ??
-        ctx.get?.('workspaceRegistry');
-    if (!registry || typeof registry.resolveByPath !== 'function') {
-        log(`${tag} workspaceRegistry unavailable; session stays ungrouped`);
-        return;
-    }
-    try {
-        let entity = await registry.resolveByPath(cwd);
-        if (!entity) {
-            const title = path.basename(cwd) || 'workspace';
-            entity = await registry.create(cwd, title);
-            log(`${tag} created workspace title=${title} path=${cwd}`);
-        }
-        const already = entity.record?.sessionIds?.includes(sessionId);
-        if (already) {
-            log(`${tag} session already on workspace path=${entity.record?.path ?? cwd}`);
-            return;
-        }
-        await entity.attachSession(sessionId);
-        log(`${tag} attached session=${sessionId} to workspace=${entity.record?.title ?? path.basename(cwd)}`);
-    }
-    catch (err) {
-        log(`${tag} workspace attach failed session=${sessionId}: ${err instanceof Error ? err.message : String(err)}`);
-    }
 }
 function watchAgentError(agent, onError) {
     try {

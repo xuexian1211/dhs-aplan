@@ -6,6 +6,7 @@ import path from 'node:path'
 import type { Config } from './config.js'
 import { hostCtx } from './host-ctx.js'
 import { ensureAgentPreset } from './ensure-agent-preset.js'
+import { ensureWorkspaceAttached } from './workspace-attach.js'
 import { mountPlanMcpTools } from './plan-mcp-tools.js'
 
 /** Side-effect imports so Context gains `agents` typings. */
@@ -56,9 +57,13 @@ export async function rehydrateAplanSessions(
   let skippedLive = 0
   let failed = 0
 
+  let skippedNoCwd = 0
   for (const cfg of byPrefix) {
     const cwd = (cfg.cwd || '').trim()
-    if (!cwd) continue
+    if (!cwd) {
+      skippedNoCwd += 1
+      continue
+    }
     const ids = await collectSessionIds(host, cwd, cfg.sessionIdPrefix, log)
     for (const rawId of ids) {
       if (seen.has(rawId)) continue
@@ -80,11 +85,16 @@ export async function rehydrateAplanSessions(
           },
         })
         const live = host.agents.get(sessionId)
+        const tag = `[dhs-aplan:${role.roleKey || '_'}]`
         if (live) {
-          await ensureAgentPreset(host, live, log, `[dhs-aplan:${role.roleKey || '_'}]`)
+          await ensureAgentPreset(host, live, log, tag)
+        }
+        const roleCwd = (role.cwd || '').trim()
+        if (roleCwd) {
+          await ensureWorkspaceAttached(host, String(sessionId), roleCwd, log, tag)
         }
         resumed += 1
-        log(`[dhs-aplan:${role.roleKey || '_'}] rehydrated session=${rawId}`)
+        log(`${tag} rehydrated session=${rawId}`)
       } catch (err) {
         failed += 1
         log(
@@ -97,7 +107,7 @@ export async function rehydrateAplanSessions(
   }
 
   log(
-    `[dhs-aplan] rehydrate done resumed=${resumed} alreadyLive=${skippedLive} failed=${failed} scanned=${seen.size}`,
+    `[dhs-aplan] rehydrate done resumed=${resumed} alreadyLive=${skippedLive} failed=${failed} scanned=${seen.size} skippedNoCwd=${skippedNoCwd}`,
   )
 }
 
@@ -146,7 +156,13 @@ async function collectSessionIds(
     }
   }
 
-  for (const id of listDiskSessionIds(ctx, cwd, prefix)) out.add(id)
+  const disk = listDiskSessionIds(ctx, cwd, prefix)
+  for (const id of disk) out.add(id)
+  if (!out.size) {
+    log(
+      `[dhs-aplan] rehydrate scan empty cwd=${cwd} prefix=${prefix} diskHits=${disk.length} slug=${cwdToSlug(cwd)}`,
+    )
+  }
   return [...out]
 }
 
