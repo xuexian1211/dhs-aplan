@@ -1,6 +1,7 @@
 {
   "name": "dhs-aplan",
   "version": "0.3.12",
+  "private": true,
   "description": "Its a Plan External Agent bridge for DeepSeek Harness (multi-role runners, CodexHub-style session titles, in-app settings page).",
   "license": "MIT",
   "type": "module",
@@ -46,4 +47,3 @@
     "typescript": "^5.6.0"
   }
 }
-
