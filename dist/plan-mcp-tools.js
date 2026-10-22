@@ -1,4 +1,3 @@
-import { resolveSecret } from './config.js';
 import { McpClient } from './mcp-client.js';
 const MOUNTED = Symbol.for('dhs-aplan.planMcpMounted');
 /**
@@ -20,8 +19,9 @@ export async function mountPlanMcpTools(agentCtx, config, log) {
     if (!tools || typeof tools.register !== 'function') {
         throw new Error('dhs-aplan mountPlanMcp requires ctx.tools on the agent scope (dsh-tools / agent-loop)');
     }
-    const bearer = (config.mcpBearerEnv.trim() ? resolveSecret(config.mcpBearerEnv) : '') ||
-        resolveSecret(config.claimKeyEnv);
+    const bearer = (config.mcpBearer && String(config.mcpBearer).trim()) ||
+        (config.claimKey && String(config.claimKey).trim()) ||
+        '';
     if (!bearer) {
         throw new Error('dhs-aplan mountPlanMcp: missing claim/MCP bearer key');
     }

@@ -1,6 +1,6 @@
 # dhs-aplan
 
-DeepSeek Harness × It's a Plan 插件（包名 `dhs-aplan`，0.3.0）。目标是取代 CodexHub 的 itsaplan 通道；Plan 本身不改。
+DeepSeek Harness × It's a Plan 插件（包名 `dhs-aplan`，0.3.6）。目标是取代 CodexHub 的 itsaplan 通道；Plan 本身不改。
 规划与进度见 [docs/roadmap-phase2-3.md](docs/roadmap-phase2-3.md)。
 
 ## 闭环（每个角色一条）
@@ -29,11 +29,11 @@ Key 只填**环境变量名**，不存 Key 值。
 
 ```yaml
 roles:
-  - { key: dev,    role: 开发,     claimKeyEnv: ITSAPLAN_KEY_DEV }
-  - { key: req,    role: 需求分析, claimKeyEnv: ITSAPLAN_KEY_REQ,    mcpBearerEnv: ITSAPLAN_MCP_REQ }
-  - { key: swa,    role: 架构,     claimKeyEnv: ITSAPLAN_KEY_SWA,    mcpBearerEnv: ITSAPLAN_MCP_SWA }
-  - { key: review, role: 评审,     claimKeyEnv: ITSAPLAN_KEY_REVIEW, mcpBearerEnv: ITSAPLAN_MCP_REVIEW }
-  - { key: test,   role: 测试,     claimKeyEnv: ITSAPLAN_KEY_TEST,   mcpBearerEnv: ITSAPLAN_MCP_TEST, enabled: false }
+  - { key: dev,    role: 开发,     claimKeyEnv: APLAN_KEY_DEV }
+  - { key: req,    role: 需求分析, claimKeyEnv: APLAN_KEY_REQ,    mcpBearerEnv: APLAN_MCP_REQ }
+  - { key: swa,    role: 架构,     claimKeyEnv: APLAN_KEY_SWA,    mcpBearerEnv: APLAN_MCP_SWA }
+  - { key: review, role: 评审,     claimKeyEnv: APLAN_KEY_REVIEW, mcpBearerEnv: APLAN_MCP_REVIEW }
+  - { key: test,   role: 测试,     claimKeyEnv: APLAN_KEY_TEST,   mcpBearerEnv: APLAN_MCP_TEST, enabled: false }
 ```
 
 多角色会话 id 为 `dhs-aplan-<key>-AE-xx`。同一角色不能同时由 CodexHub 和本插件领取（会抢队列）。
@@ -45,7 +45,7 @@ roles:
 | `enabled` | true | 总开关 |
 | `baseUrl` | `http://192.168.10.146:8001` | Plan API |
 | `role` | `开发` | 单角色显示名（标题/评论） |
-| `claimKeyEnv` | `ITSAPLAN_KEY_DEV` | 领取 key 的环境变量名 |
+| `claimKeyEnv` | `APLAN_KEY_DEV` | 领取 key 的环境变量名 |
 | `mcpBearerEnv` | `""` | MCP Bearer 环境变量名；空=复用 claim key |
 | `mcpPath` | `/mcp` | MCP 路径 |
 | `mode` | `dry-run`（bundle patch 里为 `harness`） | `harness` \| `dry-run` |
@@ -87,4 +87,12 @@ Desktop generation 已装时，只把 `dist/`、`package.json`、`cordis.patch.y
 
 ## 多角色（GUI）
 
-插件页「配置」→「多角色」为可增删列表（类似 CodexHub 账号列表）。空列表 = 只用上方单角色默认（开发）。点「填入五角色模板」可写入需求分析/架构/开发/评审/测试五行，环境变量名分别为 ITSAPLAN_KEY_REQ|SWA|DEV|REVIEW|TEST 与对应 ITSAPLAN_MCP_*（开发 MCP 可留空复用领取 Key）。只填变量名，不存密钥。
+插件页「配置」→「多角色」为可增删列表（类似 CodexHub 账号列表）。空列表 = 只用上方单角色默认（开发）。点「填入五角色模板」可写入需求分析/架构/开发/评审/测试五行，环境变量名分别为 APLAN_KEY_REQ|SWA|DEV|REVIEW|TEST 与对应 APLAN_MCP_*（开发 MCP 可留空复用领取 Key）。只填变量名，不存密钥。
+
+
+## 0.3.6 要点
+
+- **直接填 Key**：角色卡密码框 → DSH credentials 存储（APLAN_KEY_<ROLE> / APLAN_MCP_<ROLE>）。
+- **连接状态**：设置页顶部与每卡显示 已接入 / 未接入 / 已暂停；关闭「启用」即暂停领取。
+- **推理强度**：reasoningEffort → AgentOptions.reasoningEffort（off/minimal/low/medium/high/xhigh）。
+- **自动归档**：配置项与 CodexHub 对齐；DSH 尚无按 Plan 看板列归档会话 API，开启后仅日志（建议先开「仅演练」）。

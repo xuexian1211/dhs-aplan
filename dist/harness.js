@@ -203,9 +203,13 @@ function buildAgentOptions(ctx, config, log, tag) {
         log(`${tag} harness warning: no provider/model in config and agentDefaultModel missing`);
         return undefined;
     }
+    const effort = (config.reasoningEffort || '').trim();
+    if (effort)
+        log(`${tag} harness reasoningEffort=${effort}`);
     return {
         ...(provider ? { provider } : {}),
         ...(model ? { model } : {}),
+        ...(effort ? { reasoningEffort: effort } : {}),
     };
 }
 function readDefaultModel(ctx) {

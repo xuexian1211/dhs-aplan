@@ -1,8 +1,9 @@
 /**
  * Plugin config. Claim identity (x-api-key) and MCP writeback bearer stay separate
- * slots (AE handbook 0.2) even when they point at the same env var.
+ * slots (AE handbook 0.2) even when they point at the same env/credential ref.
  *
- * Secrets are never stored here: every *Env field is an env var NAME.
+ * Secrets are never stored in cordis.patch.yml: *Env fields are ref/env NAMES.
+ * Plaintext claimKey / mcpBearer may exist only in memory after resolve (never logged).
  */
 
 /** Per-role overrides inside `roles[]`. Empty / missing fields inherit the top level. */
@@ -11,7 +12,7 @@ export interface RoleConfig {
   key?: string
   /** Display role, shown in session titles and Plan comments, e.g. 开发. */
   role?: string
-  /** false = keep the row but do not run it. */
+  /** false = keep the row but do not run it (paused). */
   enabled?: boolean
   claimKeyEnv?: string
   mcpBearerEnv?: string
@@ -23,6 +24,8 @@ export interface RoleConfig {
   cwd?: string
   provider?: string
   model?: string
+  /** Adapter-owned reasoning effort id (off/minimal/low/medium/high/xhigh). Empty = model default. */
+  reasoningEffort?: string
   mode?: 'dry-run' | 'harness'
   sessionIdPrefix?: string
   reuseSessionPerIssue?: boolean
@@ -42,10 +45,19 @@ export interface Config {
   role: string
   /** Role key used in logs / session ids for multi-role. Top level = "" (back-compat ids). */
   roleKey: string
-  /** Env var name holding the claim key (x-api-key). */
+  /** Credential ref / env var name holding the claim key (x-api-key). */
   claimKeyEnv: string
-  /** Env var name holding MCP Bearer for writeback. Empty = reuse claim key. */
+  /** Credential ref / env var name holding MCP Bearer for writeback. Empty = reuse claim key. */
   mcpBearerEnv: string
+  /**
+   * In-memory plaintext claim key (from credentials store / env). Never persist / log.
+   * Filled by the supervisor before starting a runner.
+   */
+  claimKey: string
+  /**
+   * In-memory plaintext MCP bearer. Empty = reuse claimKey. Never persist / log.
+   */
+  mcpBearer: string
   /** MCP endpoint path on the same host, default /mcp */
   mcpPath: string
   /** Poll interval when claim returns null (ms). */
@@ -65,6 +77,8 @@ export interface Config {
   /** Optional provider / model override. Empty = profile default. */
   provider: string
   model: string
+  /** Adapter-owned reasoning effort; empty = provider/model default. */
+  reasoningEffort: string
   /** Prefix for generated session ids. */
   sessionIdPrefix: string
   /** Reuse one session per Plan issue. */
@@ -77,11 +91,24 @@ export interface Config {
   setSessionTitle: boolean
   /** Rename an existing (reused) session when its title differs from the norm. */
   renameExistingSession: boolean
+  /**
+   * Auto-archive completed/canceled Plan-issue sessions (CodexHub parity).
+   * DSH has no Plan-column→session archive API yet; when true, sweeps only log
+   * (and respect archiveDryRun). Kept so GUI/config stay forward-compatible.
+   */
+  archiveDoneThreads: boolean
+  archiveDryRun: boolean
+  /** Sweep interval in minutes (min 5). */
+  archiveSweepMinutes: number
+  /** Wait after issue enters completed/canceled before archive (minutes, min 5). */
+  archiveGraceMinutes: number
 }
 
 /** Raw plugin config as written in cordis.patch.yml / GUI. */
-export interface RawConfig extends Partial<Omit<Config, 'roleKey'>> {
+export interface RawConfig extends Partial<Omit<Config, 'roleKey' | 'claimKey' | 'mcpBearer'>> {
   roles?: RoleConfig[]
+  /** Host-published JSON status blob for the settings page (read-only in GUI). */
+  runtimeStatus?: string
 }
 
 export const defaultConfig: Config = {
@@ -89,8 +116,10 @@ export const defaultConfig: Config = {
   baseUrl: 'http://192.168.10.146:8001',
   role: '开发',
   roleKey: '',
-  claimKeyEnv: 'ITSAPLAN_KEY_DEV',
+  claimKeyEnv: 'APLAN_KEY_DEV',
   mcpBearerEnv: '',
+  claimKey: '',
+  mcpBearer: '',
   mcpPath: '/mcp',
   pollIntervalMs: 5000,
   heartbeatIntervalMs: 15000,
@@ -101,12 +130,17 @@ export const defaultConfig: Config = {
   cwd: '',
   provider: '',
   model: '',
+  reasoningEffort: '',
   sessionIdPrefix: 'dhs-aplan-',
   reuseSessionPerIssue: true,
   disposeAfterRun: false,
   mountPlanMcp: true,
   setSessionTitle: true,
   renameExistingSession: true,
+  archiveDoneThreads: false,
+  archiveDryRun: true,
+  archiveSweepMinutes: 240,
+  archiveGraceMinutes: 30,
 }
 
 function pick<T>(value: T | undefined | null, fallback: T): T {
@@ -130,12 +164,11 @@ function pickBool(value: boolean | undefined | null, fallback: boolean): boolean
 function base(raw: RawConfig): Config {
   const out = { ...defaultConfig }
   for (const key of Object.keys(defaultConfig) as (keyof Config)[]) {
-    if (key === 'roleKey') continue
+    if (key === 'roleKey' || key === 'claimKey' || key === 'mcpBearer') continue
     const v = (raw as Record<string, unknown>)[key]
     if (v === undefined || v === null) continue
     ;(out as Record<string, unknown>)[key] = v
   }
-  // Empty strings are meaningful for these (= "use profile default / reuse claim key").
   return out
 }
 
@@ -163,13 +196,15 @@ export function resolveRoles(raw: RawConfig): Config[] {
       claimKeyEnv: pick(r.claimKeyEnv, top.claimKeyEnv),
       // explicit "" on a role means "reuse this role's claim key"
       mcpBearerEnv: r.mcpBearerEnv !== undefined ? String(r.mcpBearerEnv) : top.mcpBearerEnv,
+      claimKey: '',
+      mcpBearer: '',
       mcpPath: pick(r.mcpPath, top.mcpPath),
       mcpCommentTool: pick(r.mcpCommentTool, top.mcpCommentTool),
       postClaimComment: pickBool(r.postClaimComment, top.postClaimComment),
-      // empty cwd is allowed (= no meta.cwd / ungrouped session)
       cwd: pickKeepEmpty(r.cwd, top.cwd),
       provider: pickKeepEmpty(r.provider, top.provider),
       model: pickKeepEmpty(r.model, top.model),
+      reasoningEffort: pickKeepEmpty(r.reasoningEffort, top.reasoningEffort),
       mode: pick(r.mode, top.mode),
       sessionIdPrefix: pick(r.sessionIdPrefix, `${top.sessionIdPrefix}${key}-`),
       reuseSessionPerIssue: pickBool(r.reuseSessionPerIssue, top.reuseSessionPerIssue),
@@ -182,8 +217,15 @@ export function resolveRoles(raw: RawConfig): Config[] {
   return out
 }
 
+/** Sync env-only helper (tests / legacy). Prefer resolveSecretValue in runners. */
 export function resolveSecret(envName: string): string {
   const name = envName.trim()
   if (!name) return ''
   return (process.env[name] ?? '').trim()
+}
+
+/** Config signature for reconcile — excludes in-memory plaintext secrets. */
+export function configSignature(cfg: Config): string {
+  const { claimKey: _c, mcpBearer: _m, ...rest } = cfg
+  return JSON.stringify(rest)
 }

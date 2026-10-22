@@ -25,6 +25,7 @@ function build(z) {
         cwd: z.string(),
         provider: z.string(),
         model: z.string(),
+        reasoningEffort: z.string(),
         mode: z.string(),
         sessionIdPrefix: z.string(),
         reuseSessionPerIssue: z.boolean(),
@@ -36,7 +37,6 @@ function build(z) {
     return z.object({
         enabled: b(d.enabled),
         baseUrl: s(d.baseUrl),
-        // Top-level role/claim/cwd/mode remain for back-compat + inheritance when roles[].
         role: s(d.role),
         claimKeyEnv: s(d.claimKeyEnv),
         mcpBearerEnv: s(d.mcpBearerEnv),
@@ -50,13 +50,20 @@ function build(z) {
         cwd: s(d.cwd),
         provider: s(d.provider),
         model: s(d.model),
+        reasoningEffort: s(d.reasoningEffort),
         sessionIdPrefix: s(d.sessionIdPrefix),
         reuseSessionPerIssue: b(d.reuseSessionPerIssue),
         disposeAfterRun: b(d.disposeAfterRun),
         mountPlanMcp: b(d.mountPlanMcp),
         setSessionTitle: b(d.setSessionTitle),
         renameExistingSession: b(d.renameExistingSession),
+        archiveDoneThreads: b(d.archiveDoneThreads),
+        archiveDryRun: b(d.archiveDryRun),
+        archiveSweepMinutes: n(d.archiveSweepMinutes),
+        archiveGraceMinutes: n(d.archiveGraceMinutes),
         roles: z.array(role).default([]).volatile(),
+        /** Host-published JSON; GUI reads only. */
+        runtimeStatus: s('[]'),
     });
 }
 function pickZ(mod) {
@@ -67,7 +74,6 @@ function pickZ(mod) {
 }
 async function loadSchemastery() {
     const tried = [];
-    // 1) createRequire against Desktop process entry (process.argv[1])
     try {
         const entry = process.argv[1];
         if (entry) {
@@ -80,7 +86,6 @@ async function loadSchemastery() {
     catch (err) {
         tried.push(`argv1: ${err instanceof Error ? err.message : err}`);
     }
-    // 2) createRequire against this module (import.meta.url)
     try {
         tried.push('createRequire(import.meta.url)');
         const require = createRequire(import.meta.url);
@@ -90,7 +95,6 @@ async function loadSchemastery() {
     catch (err) {
         tried.push(`import.meta.url: ${err instanceof Error ? err.message : err}`);
     }
-    // 3) Also try asar package.json anchors (same pattern as plan-mcp-tools)
     const asarAnchors = [
         'C:/Program Files/DSH Desktop/resources/app.asar/package.json',
         'C:/Program Files/DSH Desktop/resources/app.asar/node_modules/@deepseek-ai/schemastery/package.json',
@@ -106,7 +110,6 @@ async function loadSchemastery() {
             tried.push(`${anchor}: ${err instanceof Error ? err.message : err}`);
         }
     }
-    // 4) dynamic import (host-module-fallback may help)
     try {
         tried.push('dynamic import');
         const mod = (await import('@deepseek-ai/schemastery'));

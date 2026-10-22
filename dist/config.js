@@ -1,16 +1,19 @@
 /**
  * Plugin config. Claim identity (x-api-key) and MCP writeback bearer stay separate
- * slots (AE handbook 0.2) even when they point at the same env var.
+ * slots (AE handbook 0.2) even when they point at the same env/credential ref.
  *
- * Secrets are never stored here: every *Env field is an env var NAME.
+ * Secrets are never stored in cordis.patch.yml: *Env fields are ref/env NAMES.
+ * Plaintext claimKey / mcpBearer may exist only in memory after resolve (never logged).
  */
 export const defaultConfig = {
     enabled: true,
     baseUrl: 'http://192.168.10.146:8001',
     role: '开发',
     roleKey: '',
-    claimKeyEnv: 'ITSAPLAN_KEY_DEV',
+    claimKeyEnv: 'APLAN_KEY_DEV',
     mcpBearerEnv: '',
+    claimKey: '',
+    mcpBearer: '',
     mcpPath: '/mcp',
     pollIntervalMs: 5000,
     heartbeatIntervalMs: 15000,
@@ -21,12 +24,17 @@ export const defaultConfig = {
     cwd: '',
     provider: '',
     model: '',
+    reasoningEffort: '',
     sessionIdPrefix: 'dhs-aplan-',
     reuseSessionPerIssue: true,
     disposeAfterRun: false,
     mountPlanMcp: true,
     setSessionTitle: true,
     renameExistingSession: true,
+    archiveDoneThreads: false,
+    archiveDryRun: true,
+    archiveSweepMinutes: 240,
+    archiveGraceMinutes: 30,
 };
 function pick(value, fallback) {
     if (value === undefined || value === null)
@@ -50,14 +58,13 @@ function pickBool(value, fallback) {
 function base(raw) {
     const out = { ...defaultConfig };
     for (const key of Object.keys(defaultConfig)) {
-        if (key === 'roleKey')
+        if (key === 'roleKey' || key === 'claimKey' || key === 'mcpBearer')
             continue;
         const v = raw[key];
         if (v === undefined || v === null)
             continue;
         out[key] = v;
     }
-    // Empty strings are meaningful for these (= "use profile default / reuse claim key").
     return out;
 }
 /**
@@ -88,13 +95,15 @@ export function resolveRoles(raw) {
             claimKeyEnv: pick(r.claimKeyEnv, top.claimKeyEnv),
             // explicit "" on a role means "reuse this role's claim key"
             mcpBearerEnv: r.mcpBearerEnv !== undefined ? String(r.mcpBearerEnv) : top.mcpBearerEnv,
+            claimKey: '',
+            mcpBearer: '',
             mcpPath: pick(r.mcpPath, top.mcpPath),
             mcpCommentTool: pick(r.mcpCommentTool, top.mcpCommentTool),
             postClaimComment: pickBool(r.postClaimComment, top.postClaimComment),
-            // empty cwd is allowed (= no meta.cwd / ungrouped session)
             cwd: pickKeepEmpty(r.cwd, top.cwd),
             provider: pickKeepEmpty(r.provider, top.provider),
             model: pickKeepEmpty(r.model, top.model),
+            reasoningEffort: pickKeepEmpty(r.reasoningEffort, top.reasoningEffort),
             mode: pick(r.mode, top.mode),
             sessionIdPrefix: pick(r.sessionIdPrefix, `${top.sessionIdPrefix}${key}-`),
             reuseSessionPerIssue: pickBool(r.reuseSessionPerIssue, top.reuseSessionPerIssue),
@@ -106,9 +115,15 @@ export function resolveRoles(raw) {
     });
     return out;
 }
+/** Sync env-only helper (tests / legacy). Prefer resolveSecretValue in runners. */
 export function resolveSecret(envName) {
     const name = envName.trim();
     if (!name)
         return '';
     return (process.env[name] ?? '').trim();
+}
+/** Config signature for reconcile — excludes in-memory plaintext secrets. */
+export function configSignature(cfg) {
+    const { claimKey: _c, mcpBearer: _m, ...rest } = cfg;
+    return JSON.stringify(rest);
 }

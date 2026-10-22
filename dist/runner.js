@@ -1,7 +1,7 @@
-import { resolveSecret } from './config.js';
 import { runHarnessTurn } from './harness.js';
 import { McpClient } from './mcp-client.js';
 import { PlanClient } from './plan-client.js';
+import { patchStatus, safeErrorMessage } from './status.js';
 /** One claim loop for one Plan role (one external-agent key). */
 export class RoleRunner {
     ctx;
@@ -24,6 +24,11 @@ export class RoleRunner {
     start() {
         this.loopDone ??= this.loop().catch((err) => {
             this.log(`${this.tag} runner crashed: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
+            patchStatus(this.config.roleKey, {
+                role: this.config.role,
+                state: 'error',
+                lastError: safeErrorMessage(err),
+            });
         });
         return this.loopDone;
     }
@@ -48,17 +53,29 @@ export class RoleRunner {
             }
         }
     }
+    claimKey() {
+        return (this.config.claimKey || '').trim();
+    }
+    mcpBearer() {
+        const direct = (this.config.mcpBearer || '').trim();
+        if (direct)
+            return direct;
+        return this.claimKey();
+    }
     async loop() {
-        const claimKey = resolveSecret(this.config.claimKeyEnv);
+        const claimKey = this.claimKey();
         if (!claimKey) {
-            this.log(`${this.tag} missing claim key env ${this.config.claimKeyEnv} for role ${this.label}; idle`);
+            this.log(`${this.tag} missing claim key (ref ${this.config.claimKeyEnv}) for role ${this.label}; idle`);
+            patchStatus(this.config.roleKey, { role: this.config.role, state: 'no-key' });
             return;
         }
         const plan = new PlanClient(this.config.baseUrl, claimKey);
         this.log(`${this.tag} ${this.label} runner started mode=${this.config.mode} base=${this.config.baseUrl} poll=${this.config.pollIntervalMs}ms`);
+        patchStatus(this.config.roleKey, { role: this.config.role, state: 'idle' });
         let backoff = this.config.pollIntervalMs;
         while (!this.stopped) {
             try {
+                patchStatus(this.config.roleKey, { role: this.config.role, state: 'claiming' });
                 const run = await plan.claimRun();
                 if (this.stopped) {
                     if (run) {
@@ -68,6 +85,7 @@ export class RoleRunner {
                 }
                 if (!run) {
                     backoff = this.config.pollIntervalMs;
+                    patchStatus(this.config.roleKey, { role: this.config.role, state: 'idle' });
                     await this.sleep(this.config.pollIntervalMs);
                     continue;
                 }
@@ -76,7 +94,11 @@ export class RoleRunner {
             }
             catch (err) {
                 this.log(`${this.tag} claim loop error: ${err instanceof Error ? err.message : String(err)}`);
-                // exponential backoff on Plan/network errors, capped at 60s
+                patchStatus(this.config.roleKey, {
+                    role: this.config.role,
+                    state: 'error',
+                    lastError: safeErrorMessage(err),
+                });
                 backoff = Math.min(Math.max(backoff * 2, this.config.pollIntervalMs), 60_000);
                 await this.sleep(backoff);
             }
@@ -99,18 +121,30 @@ export class RoleRunner {
     async handleRun(plan, run) {
         const label = run.issueIdentifier ?? `run-${run.id}`;
         this.log(`${this.tag} claimed run=${run.id} issue=${label} role=${this.config.role} trigger=${run.trigger} attempts=${run.attempts}`);
+        patchStatus(this.config.roleKey, {
+            role: this.config.role,
+            state: 'running',
+            lastClaimAt: new Date().toISOString(),
+            lastRunId: run.id,
+            lastError: undefined,
+        });
         const state = { plan, run, reported: false };
         this.inFlight = state;
         let hbFailures = 0;
         const beat = () => {
             void plan.heartbeatRun(run.id).then(() => {
                 hbFailures = 0;
+                patchStatus(this.config.roleKey, {
+                    role: this.config.role,
+                    state: 'running',
+                    lastHeartbeatAt: new Date().toISOString(),
+                });
             }, (e) => {
                 hbFailures += 1;
                 this.log(`${this.tag} heartbeat failed run=${run.id} (#${hbFailures}): ${e instanceof Error ? e.message : e}`);
             });
         };
-        beat(); // first heartbeat immediately, not after one interval
+        beat();
         const hb = setInterval(beat, Math.max(1000, this.config.heartbeatIntervalMs));
         const report = async (body) => {
             if (state.reported)
@@ -144,6 +178,7 @@ export class RoleRunner {
                 ].join('\n');
                 await report({ status: 'success', output });
                 this.log(`${this.tag} dry-run success run=${run.id}`);
+                patchStatus(this.config.roleKey, { role: this.config.role, state: 'idle' });
                 return;
             }
             const output = await runHarnessTurn(this.ctx, this.config, run, this.log, {
@@ -151,11 +186,17 @@ export class RoleRunner {
             });
             await report({ status: 'success', output });
             this.log(`${this.tag} harness success run=${run.id}`);
+            patchStatus(this.config.roleKey, { role: this.config.role, state: 'idle' });
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             this.log(`${this.tag} run failed run=${run.id}: ${message}`);
             await report({ status: 'failed', error: message.slice(0, 4000) });
+            patchStatus(this.config.roleKey, {
+                role: this.config.role,
+                state: 'error',
+                lastError: safeErrorMessage(err),
+            });
         }
         finally {
             clearInterval(hb);
@@ -164,8 +205,7 @@ export class RoleRunner {
         }
     }
     async maybeComment(run) {
-        const bearer = (this.config.mcpBearerEnv.trim() ? resolveSecret(this.config.mcpBearerEnv) : '') ||
-            resolveSecret(this.config.claimKeyEnv);
+        const bearer = this.mcpBearer();
         if (!bearer) {
             this.log(`${this.tag} skip MCP comment: no claim/MCP key`);
             return;

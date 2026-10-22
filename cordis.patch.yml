@@ -1,6 +1,6 @@
 # dhs-aplan bundle layer — applied when a profile lists this bundle.
 # All fields are editable in DSH: 插件 → dhs-aplan → 配置 (saved to the profile patch, applied live).
-# Keys are env var NAMES, never key values.
+# Keys: prefer GUI secret fields (DSH credentials store). *Env fields are ref names (APLAN_*), never key values.
 - insert:
     - id: dhs-aplan
       name: dhs-aplan
@@ -8,7 +8,7 @@
         enabled: true
         baseUrl: http://192.168.10.146:8001
         role: 开发
-        claimKeyEnv: ITSAPLAN_KEY_DEV
+        claimKeyEnv: APLAN_KEY_DEV
         mcpBearerEnv: ""
         mcpPath: /mcp
         pollIntervalMs: 5000
@@ -20,6 +20,7 @@
         cwd: "E:\\WorkSpaces\\aida700-ERP"
         provider: openai
         model: gpt-5.6-terra
+        reasoningEffort: ""
         sessionIdPrefix: dhs-aplan-
         reuseSessionPerIssue: true
         mountPlanMcp: true
@@ -27,5 +28,9 @@
         setSessionTitle: true
         renameExistingSession: true
         # Multi-role: leave [] for single role above. Each item inherits the top level.
-        # - { key: review, role: 评审, claimKeyEnv: ITSAPLAN_KEY_REVIEW, mcpBearerEnv: ITSAPLAN_MCP_REVIEW }
+        # - { key: review, role: 评审, claimKeyEnv: APLAN_KEY_REVIEW, mcpBearerEnv: APLAN_MCP_REVIEW }
+        archiveDoneThreads: false
+        archiveDryRun: true
+        archiveSweepMinutes: 240
+        archiveGraceMinutes: 30
         roles: []

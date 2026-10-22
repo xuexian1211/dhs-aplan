@@ -1,6 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Config } from './config.js'
-import { resolveSecret } from './config.js'
 import { McpClient } from './mcp-client.js'
 
 export type LogFn = (msg: string) => void
@@ -52,8 +51,9 @@ export async function mountPlanMcpTools(
   }
 
   const bearer =
-    (config.mcpBearerEnv.trim() ? resolveSecret(config.mcpBearerEnv) : '') ||
-    resolveSecret(config.claimKeyEnv)
+    (config.mcpBearer && String(config.mcpBearer).trim()) ||
+    (config.claimKey && String(config.claimKey).trim()) ||
+    ''
   if (!bearer) {
     throw new Error('dhs-aplan mountPlanMcp: missing claim/MCP bearer key')
   }

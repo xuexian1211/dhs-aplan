@@ -1,6 +1,9 @@
-import { defaultConfig, resolveRoles } from './config.js';
+import { aplanKeyRef, aplanMcpRef, legacyItsaplanKeyRef, legacyItsaplanMcpRef, resolveSecretValue, softCredentials, } from './secrets.js';
+import { startArchiveSweeper } from './archive.js';
+import { defaultConfig, resolveRoles, configSignature } from './config.js';
 import { RoleRunner } from './runner.js';
 import { ConfigSchema } from './schema.js';
+import { patchStatus, publishRuntimeStatus, removeStatus } from './status.js';
 export const name = 'dhs-aplan';
 /** Cordis: agents required; workspaceRegistry used to attach sessions into the UI workspace tree. */
 export const inject = ['agents', 'workspaceRegistry'];
@@ -17,58 +20,105 @@ export function apply(ctx, rawConfig = {}) {
     const log = (msg) => console.log(msg);
     const runners = new Map();
     let disposed = false;
-    const read = () => {
+    const credentials = softCredentials(ctx);
+    const readRaw = () => snapshot(rawConfig);
+    const read = async () => {
         try {
-            return resolveRoles(snapshot(rawConfig));
+            const roles = resolveRoles(readRaw());
+            const out = [];
+            for (const cfg of roles) {
+                const claim = await resolveSecretValue(credentials, cfg.claimKeyEnv, aplanKeyRef(cfg.roleKey || 'DEV'), legacyItsaplanKeyRef(cfg.roleKey || 'DEV'));
+                let mcpValue = '';
+                if (cfg.mcpBearerEnv.trim()) {
+                    const mcp = await resolveSecretValue(credentials, cfg.mcpBearerEnv, aplanMcpRef(cfg.roleKey || 'DEV'), legacyItsaplanMcpRef(cfg.roleKey || 'DEV'));
+                    mcpValue = mcp.value;
+                }
+                out.push({
+                    ...cfg,
+                    claimKey: claim.value,
+                    mcpBearer: mcpValue,
+                });
+                if (!claim.value) {
+                    patchStatus(cfg.roleKey, { role: cfg.role, state: 'no-key' });
+                }
+            }
+            return out;
         }
         catch (err) {
             log(`[dhs-aplan] config error: ${err instanceof Error ? err.message : String(err)}`);
             return [];
         }
     };
+    const publishPaused = (raw) => {
+        const roles = Array.isArray(raw.roles) ? raw.roles : [];
+        for (const r of roles) {
+            if (!r || typeof r !== 'object')
+                continue;
+            const key = String(r.key ?? '').trim();
+            if (r.enabled === false) {
+                patchStatus(key, { role: String(r.role ?? key), state: 'paused' });
+            }
+        }
+        if (raw.enabled === false) {
+            patchStatus('_', { role: String(raw.role ?? '开发'), state: 'paused' });
+        }
+    };
     const reconcile = async () => {
         if (disposed)
             return;
+        const raw = readRaw();
+        publishPaused(raw);
         const wanted = new Map();
-        for (const cfg of read())
+        for (const cfg of await read())
             wanted.set(cfg.roleKey || '_', cfg);
         for (const [key, entry] of runners) {
             const next = wanted.get(key);
-            if (!next || JSON.stringify(next) !== entry.sig) {
+            if (!next || configSignature(next) !== entry.sig) {
                 runners.delete(key);
                 await entry.runner.stop(next ? 'config changed' : 'role removed/disabled');
+                if (!next)
+                    removeStatus(key);
             }
         }
         for (const [key, cfg] of wanted) {
             if (runners.has(key) || disposed)
                 continue;
+            if (!cfg.claimKey) {
+                log(`[dhs-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] missing claim key (ref ${cfg.claimKeyEnv || aplanKeyRef(cfg.roleKey || 'DEV')}); idle`);
+                patchStatus(cfg.roleKey, { role: cfg.role, state: 'no-key' });
+                continue;
+            }
             const runner = new RoleRunner(ctx, cfg, log);
-            runners.set(key, { sig: JSON.stringify(cfg), runner });
+            runners.set(key, { sig: configSignature(cfg), runner });
+            patchStatus(cfg.roleKey, { role: cfg.role, state: 'idle' });
             void runner.start();
         }
+        publishRuntimeStatus(rawConfig);
     };
+    const stopArchive = startArchiveSweeper(() => {
+        try {
+            return resolveRoles(readRaw());
+        }
+        catch {
+            return [];
+        }
+    }, log);
     ctx.effect(() => {
-        // Defer one tick so sibling plugins finish mounting.
         const first = setTimeout(() => void reconcile(), 0);
         const timer = setInterval(() => void reconcile(), RECONCILE_MS);
         return () => {
             disposed = true;
             clearTimeout(first);
             clearInterval(timer);
+            stopArchive();
             for (const { runner } of runners.values())
                 void runner.stop('plugin disposed');
             runners.clear();
             console.log('[dhs-aplan] DISPOSED — claim loops stop requested');
         };
     });
-    const roles = read();
-    console.log(`[dhs-aplan] 0.3.5 loaded roles=${roles.map((r) => `${r.role}:${r.mode}`).join(',') || '(none)'} baseUrl=${roles[0]?.baseUrl ?? defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'}`);
+    console.log(`[dhs-aplan] 0.3.6 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
 }
-/**
- * Plain copy of the config. `.volatile()` schema fields arrive as live references
- * (`{ get(), [cosmokit.volatile.write] }`); read each through `get()` so GUI edits
- * are seen on every reconcile tick.
- */
 function snapshot(raw) {
     const out = {};
     const src = (raw ?? {});
