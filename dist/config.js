@@ -35,6 +35,17 @@ function pick(value, fallback) {
         return fallback;
     return value;
 }
+/** Like pick, but empty string is kept (optional cwd / optional overrides that mean "unset"). */
+function pickKeepEmpty(value, fallback) {
+    if (value === undefined || value === null)
+        return fallback;
+    return String(value);
+}
+function pickBool(value, fallback) {
+    if (value === undefined || value === null)
+        return fallback;
+    return Boolean(value);
+}
 /** Copy only known keys so volatile references / extra keys never leak into runners. */
 function base(raw) {
     const out = { ...defaultConfig };
@@ -52,6 +63,7 @@ function base(raw) {
 /**
  * Expand raw config into one resolved Config per enabled role.
  * No `roles` (or empty) = single top-level runner (back-compat with 0.2.x).
+ * Prefer GUI writing roles[0] so multi-role and single-role share one model.
  */
 export function resolveRoles(raw) {
     const top = base(raw);
@@ -76,11 +88,20 @@ export function resolveRoles(raw) {
             claimKeyEnv: pick(r.claimKeyEnv, top.claimKeyEnv),
             // explicit "" on a role means "reuse this role's claim key"
             mcpBearerEnv: r.mcpBearerEnv !== undefined ? String(r.mcpBearerEnv) : top.mcpBearerEnv,
-            cwd: pick(r.cwd, top.cwd),
-            provider: pick(r.provider, top.provider),
-            model: pick(r.model, top.model),
+            mcpPath: pick(r.mcpPath, top.mcpPath),
+            mcpCommentTool: pick(r.mcpCommentTool, top.mcpCommentTool),
+            postClaimComment: pickBool(r.postClaimComment, top.postClaimComment),
+            // empty cwd is allowed (= no meta.cwd / ungrouped session)
+            cwd: pickKeepEmpty(r.cwd, top.cwd),
+            provider: pickKeepEmpty(r.provider, top.provider),
+            model: pickKeepEmpty(r.model, top.model),
             mode: pick(r.mode, top.mode),
             sessionIdPrefix: pick(r.sessionIdPrefix, `${top.sessionIdPrefix}${key}-`),
+            reuseSessionPerIssue: pickBool(r.reuseSessionPerIssue, top.reuseSessionPerIssue),
+            disposeAfterRun: pickBool(r.disposeAfterRun, top.disposeAfterRun),
+            mountPlanMcp: pickBool(r.mountPlanMcp, top.mountPlanMcp),
+            setSessionTitle: pickBool(r.setSessionTitle, top.setSessionTitle),
+            renameExistingSession: pickBool(r.renameExistingSession, top.renameExistingSession),
         });
     });
     return out;

@@ -15,11 +15,21 @@ export interface RoleConfig {
   enabled?: boolean
   claimKeyEnv?: string
   mcpBearerEnv?: string
+  /** MCP endpoint path override; empty / missing → top-level mcpPath. */
+  mcpPath?: string
+  /** MCP comment tool override; empty / missing → top-level mcpCommentTool. */
+  mcpCommentTool?: string
+  postClaimComment?: boolean
   cwd?: string
   provider?: string
   model?: string
   mode?: 'dry-run' | 'harness'
   sessionIdPrefix?: string
+  reuseSessionPerIssue?: boolean
+  disposeAfterRun?: boolean
+  mountPlanMcp?: boolean
+  setSessionTitle?: boolean
+  renameExistingSession?: boolean
 }
 
 /** Fully resolved config for one role runner. */
@@ -50,7 +60,7 @@ export interface Config {
   postClaimComment: boolean
   /** MCP tool name used to add an issue comment. */
   mcpCommentTool: string
-  /** Absolute working directory for the harness session (`meta.cwd`). */
+  /** Absolute working directory for the harness session (`meta.cwd`). Empty = no cwd / ungrouped. */
   cwd: string
   /** Optional provider / model override. Empty = profile default. */
   provider: string
@@ -105,6 +115,17 @@ function pick<T>(value: T | undefined | null, fallback: T): T {
   return value
 }
 
+/** Like pick, but empty string is kept (optional cwd / optional overrides that mean "unset"). */
+function pickKeepEmpty(value: string | undefined | null, fallback: string): string {
+  if (value === undefined || value === null) return fallback
+  return String(value)
+}
+
+function pickBool(value: boolean | undefined | null, fallback: boolean): boolean {
+  if (value === undefined || value === null) return fallback
+  return Boolean(value)
+}
+
 /** Copy only known keys so volatile references / extra keys never leak into runners. */
 function base(raw: RawConfig): Config {
   const out = { ...defaultConfig }
@@ -121,6 +142,7 @@ function base(raw: RawConfig): Config {
 /**
  * Expand raw config into one resolved Config per enabled role.
  * No `roles` (or empty) = single top-level runner (back-compat with 0.2.x).
+ * Prefer GUI writing roles[0] so multi-role and single-role share one model.
  */
 export function resolveRoles(raw: RawConfig): Config[] {
   const top = base(raw)
@@ -141,11 +163,20 @@ export function resolveRoles(raw: RawConfig): Config[] {
       claimKeyEnv: pick(r.claimKeyEnv, top.claimKeyEnv),
       // explicit "" on a role means "reuse this role's claim key"
       mcpBearerEnv: r.mcpBearerEnv !== undefined ? String(r.mcpBearerEnv) : top.mcpBearerEnv,
-      cwd: pick(r.cwd, top.cwd),
-      provider: pick(r.provider, top.provider),
-      model: pick(r.model, top.model),
+      mcpPath: pick(r.mcpPath, top.mcpPath),
+      mcpCommentTool: pick(r.mcpCommentTool, top.mcpCommentTool),
+      postClaimComment: pickBool(r.postClaimComment, top.postClaimComment),
+      // empty cwd is allowed (= no meta.cwd / ungrouped session)
+      cwd: pickKeepEmpty(r.cwd, top.cwd),
+      provider: pickKeepEmpty(r.provider, top.provider),
+      model: pickKeepEmpty(r.model, top.model),
       mode: pick(r.mode, top.mode),
       sessionIdPrefix: pick(r.sessionIdPrefix, `${top.sessionIdPrefix}${key}-`),
+      reuseSessionPerIssue: pickBool(r.reuseSessionPerIssue, top.reuseSessionPerIssue),
+      disposeAfterRun: pickBool(r.disposeAfterRun, top.disposeAfterRun),
+      mountPlanMcp: pickBool(r.mountPlanMcp, top.mountPlanMcp),
+      setSessionTitle: pickBool(r.setSessionTitle, top.setSessionTitle),
+      renameExistingSession: pickBool(r.renameExistingSession, top.renameExistingSession),
     })
   })
   return out

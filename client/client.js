@@ -2,6 +2,11 @@
 // Hand-written in the DSH client-module factory format (no bundler needed).
 // Slot must use options.key = package name ("dhs-aplan"); plugin-manager matches
 // plugins.bundle.config via entryKey: pkg.name (keyed slot), not id.
+//
+// Layout (0.3.3): GLOBAL top = baseUrl + intervals + enabled +「全站默认」session toggles.
+// Per-role cards hold claim/MCP keys, mode/cwd/provider/model, sessionIdPrefix, and
+// optional per-role session/MCP overrides. Empty roles[] shows one editable default
+// card that writes roles[0] (single model).
 window.__ModuleLoader__.load({
 	id: "dhs-aplan",
 	factory: (require) => {
@@ -16,11 +21,11 @@ window.__ModuleLoader__.load({
 		const PACKAGE_KEY = "dhs-aplan";
 
 		const FIVE_ROLE_TEMPLATE = [
-			{ key: "req", role: "需求分析", claimKeyEnv: "ITSAPLAN_KEY_REQ", mcpBearerEnv: "ITSAPLAN_MCP_REQ", enabled: true },
-			{ key: "swa", role: "架构", claimKeyEnv: "ITSAPLAN_KEY_SWA", mcpBearerEnv: "ITSAPLAN_MCP_SWA", enabled: true },
-			{ key: "dev", role: "开发", claimKeyEnv: "ITSAPLAN_KEY_DEV", mcpBearerEnv: "", enabled: true },
-			{ key: "review", role: "评审", claimKeyEnv: "ITSAPLAN_KEY_REVIEW", mcpBearerEnv: "ITSAPLAN_MCP_REVIEW", enabled: true },
-			{ key: "test", role: "测试", claimKeyEnv: "ITSAPLAN_KEY_TEST", mcpBearerEnv: "ITSAPLAN_MCP_TEST", enabled: true },
+			{ key: "req", role: "需求分析", claimKeyEnv: "ITSAPLAN_KEY_REQ", mcpBearerEnv: "ITSAPLAN_MCP_REQ", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
+			{ key: "swa", role: "架构", claimKeyEnv: "ITSAPLAN_KEY_SWA", mcpBearerEnv: "ITSAPLAN_MCP_SWA", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
+			{ key: "dev", role: "开发", claimKeyEnv: "ITSAPLAN_KEY_DEV", mcpBearerEnv: "", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
+			{ key: "review", role: "评审", claimKeyEnv: "ITSAPLAN_KEY_REVIEW", mcpBearerEnv: "ITSAPLAN_MCP_REVIEW", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
+			{ key: "test", role: "测试", claimKeyEnv: "ITSAPLAN_KEY_TEST", mcpBearerEnv: "ITSAPLAN_MCP_TEST", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
 		];
 
 		const zh = {
@@ -28,16 +33,17 @@ window.__ModuleLoader__.load({
 			description: "It's a Plan 外部 Agent 领取 → Harness 会话 → 回写结果。",
 			enabled: "启用", enabledHint: "关闭后插件不再领取任何角色的 run。",
 			baseUrl: "Plan 地址", baseUrlHint: "例如 http://192.168.10.146:8001",
-			mode: "模式", modeHint: "harness = 真实 Agent 回合；dry-run = 只领取/评论+直接回 success（联调用）。",
-			role: "角色名（会话标题显示）", roleHint: "单角色时使用，例如 开发。会话标题：<ISSUE> · <角色> · <标题>。",
+			mode: "模式",
+			modeHint: "harness = 真实 Agent 回合；dry-run = 只领取/评论后直接回 success（联调用，不跑 Harness）。",
+			role: "角色名（会话标题显示）",
 			claimKeyEnv: "领取 Key 环境变量名", claimKeyEnvHint: "填环境变量名（不是 Key 本身），例如 ITSAPLAN_KEY_DEV。",
 			mcpBearerEnv: "MCP 写回 Key 环境变量名", mcpBearerEnvHint: "留空 = 复用领取 Key。",
-			mcpPath: "MCP 路径", mcpPathHint: "默认 /mcp",
+			mcpPath: "MCP 路径", mcpPathHint: "默认 /mcp；留空则用全站默认。",
 			mcpCommentTool: "评论工具名", mcpCommentToolHint: "领取后发评论用的 MCP 工具，例如 create_issue_comment。",
 			postClaimComment: "领取后发评论",
-			cwd: "工作目录（绝对路径）", cwdHint: "Harness 会话 cwd，并挂到同名工作区。",
-			provider: "Provider", providerHint: "留空 = profile 默认模型。",
-			model: "模型", modelHint: "留空 = profile 默认模型。",
+			cwd: "工作目录（绝对路径，可选）", cwdHint: "留空 = 不设 cwd、会话不挂工作区。填则须为绝对路径。",
+			provider: "Provider", providerHint: "留空 = profile 默认。",
+			model: "模型", modelHint: "留空 = profile 默认。",
 			pollIntervalMs: "轮询间隔（ms）", heartbeatIntervalMs: "心跳间隔（ms）", heartbeatIntervalMsHint: "须小于 Plan lease（30s）。",
 			turnTimeoutMs: "单回合超时（ms）", turnTimeoutMsHint: "0 = 不限；超时会中断回合并回报 failed。",
 			sessionIdPrefix: "会话 id 前缀",
@@ -46,50 +52,54 @@ window.__ModuleLoader__.load({
 			mountPlanMcp: "给 Agent 挂载 Plan MCP 工具",
 			setSessionTitle: "按规范设置会话标题",
 			renameExistingSession: "复用会话时也纠正标题",
-			roles: "多角色",
-			rolesHint: "空列表 = 只跑上面的单角色（开发）。每行可改 key / 显示名 / 环境变量名（不是密钥）以及可选 cwd、mode、provider、model、sessionIdPrefix。",
+			roles: "角色列表",
+			rolesHint: "每个角色一张卡片（身份 / 连接 / 运行 / 会话）。列表为空时显示一张默认可编辑卡，编辑后写入 roles[0]。",
 			rolesAdd: "添加角色",
 			rolesRemove: "删除",
 			rolesTemplate: "填入五角色模板",
-			rolesEmpty: "当前无多角色，保存后保持顶层单角色。",
+			rolesEmptyHint: "尚未保存多角色；编辑下方默认卡会写入 roles[0]。",
 			roleKey: "key（slug）",
 			roleDisplay: "角色显示名",
 			roleEnabled: "启用",
-			roleOptional: "可选覆盖",
+			sectionIdentity: "身份",
+			sectionConn: "连接与 Key",
+			sectionRun: "运行",
+			sectionSession: "会话（本角色）",
+			siteDefaults: "全站默认",
 			invalid: "格式不对", invalidMode: "只能是 harness 或 dry-run", invalidJson: "需要 JSON 数组",
 			overridden: "已覆盖", reset: "恢复默认",
 			readOnly: "本部署的设置为只读。", unavailable: "dhs-aplan 未加载（或缺少 schema），暂时无法配置。",
 			save: "保存", saving: "保存中…", saveFailed: "部署没有接受这些值，已保留供你修改。",
-			groupConn: "连接与身份", groupRun: "运行", groupSession: "会话", groupRoles: "多角色",
+			groupGlobal: "全局", groupSiteSession: "全站默认 · 会话", groupRoles: "角色",
 		};
 		const en = Object.assign({}, zh, {
 			description: "It's a Plan external agent: claim → Harness session → report.",
+			modeHint: "harness = real Agent turn; dry-run = claim/comment then success without a Harness turn (for integration tests).",
+			cwd: "Working directory (absolute, optional)", cwdHint: "Empty = no cwd / session stays ungrouped. Must be absolute when set.",
 			roles: "Roles",
-			rolesHint: "Empty list = single top-level role only. Each row: key / display name / env var names (not secrets) and optional cwd, mode, provider, model, sessionIdPrefix.",
+			rolesHint: "One card per role (identity / connection / run / session). Empty list shows one editable default card that writes roles[0].",
 			rolesAdd: "Add role",
 			rolesRemove: "Delete",
 			rolesTemplate: "Fill five-role template",
-			rolesEmpty: "No multi-role rows; save keeps the top-level single role.",
+			rolesEmptyHint: "No roles saved yet; editing the default card writes roles[0].",
 			roleKey: "key (slug)",
 			roleDisplay: "Display name",
 			roleEnabled: "Enabled",
-			roleOptional: "Optional overrides",
+			sectionIdentity: "Identity",
+			sectionConn: "Connection & keys",
+			sectionRun: "Run",
+			sectionSession: "Session (this role)",
+			siteDefaults: "Site defaults",
 			save: "Save", saving: "Saving…", reset: "Reset", overridden: "Overridden",
-			groupConn: "Connection", groupRun: "Run", groupSession: "Session", groupRoles: "Roles",
+			groupGlobal: "Global", groupSiteSession: "Site defaults · Session", groupRoles: "Roles",
 		});
 
 		const text = (f) => P.settingsTextField(f);
 		const num = (f) => P.settingsNumberField(f);
-		const rawText = (f) => ({ field: f, format: (v) => (typeof v === "string" ? v : ""), parse: (t) => ({ kind: "set", value: t.trim() }) });
 		const bool = (f) => ({
 			field: f,
 			format: (v) => (v === true ? "true" : v === false ? "false" : ""),
 			parse: (t) => (t === "" ? { kind: "clear" } : t === "true" ? { kind: "set", value: true } : t === "false" ? { kind: "set", value: false } : void 0),
-		});
-		const mode = (f) => ({
-			field: f,
-			format: (v) => (typeof v === "string" ? v : ""),
-			parse: (t) => { const s = t.trim(); if (s === "") return { kind: "clear" }; return s === "harness" || s === "dry-run" ? { kind: "set", value: s } : void 0; },
 		});
 		/** Persist roles as a JSON array string in the form; empty / [] → clear so backend keeps single top-level 开发. */
 		const json = (f) => ({
@@ -98,10 +108,11 @@ window.__ModuleLoader__.load({
 			parse: (t) => { const s = t.trim(); if (s === "" || s === "[]") return { kind: "clear" }; try { const v = JSON.parse(s); return Array.isArray(v) ? { kind: "set", value: v } : void 0; } catch { return void 0; } },
 		});
 
+		// GLOBAL only: baseUrl, intervals, enabled master switch, site-default session toggles.
+		// Per-role fields live inside RolesListEditor cards (and roles[] schema).
 		const FIELDS = [
-			["groupConn", [["baseUrl", text], ["claimKeyEnv", text], ["mcpBearerEnv", rawText], ["mcpPath", text], ["mcpCommentTool", text]]],
-			["groupRun", [["enabled", bool], ["mode", mode], ["role", text], ["cwd", rawText], ["provider", rawText], ["model", rawText], ["pollIntervalMs", num], ["heartbeatIntervalMs", num], ["turnTimeoutMs", num], ["postClaimComment", bool], ["mountPlanMcp", bool]]],
-			["groupSession", [["setSessionTitle", bool], ["renameExistingSession", bool], ["reuseSessionPerIssue", bool], ["disposeAfterRun", bool], ["sessionIdPrefix", text]]],
+			["groupGlobal", [["enabled", bool], ["baseUrl", text], ["pollIntervalMs", num], ["heartbeatIntervalMs", num], ["turnTimeoutMs", num]]],
+			["groupSiteSession", [["setSessionTitle", bool], ["renameExistingSession", bool], ["reuseSessionPerIssue", bool], ["disposeAfterRun", bool]]],
 			["groupRoles", [["roles", json]]],
 		];
 		const SPECS = [];
@@ -115,12 +126,13 @@ window.__ModuleLoader__.load({
 			marginTop: 8,
 			display: "flex",
 			flexDirection: "column",
-			gap: 8,
+			gap: 10,
 		};
 		const ROW_HEAD = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 };
 		const GRID = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 };
 		const FIELD = { display: "flex", flexDirection: "column", gap: 4, fontSize: 12 };
 		const LABEL = { color: "var(--dsw-alias-label-secondary, #666)", fontSize: 12 };
+		const SECTION = { fontSize: 12, fontWeight: 600, marginTop: 4, color: "var(--dsw-alias-label-secondary, #666)" };
 		const INPUT = {
 			fontSize: 13,
 			padding: "6px 8px",
@@ -132,6 +144,20 @@ window.__ModuleLoader__.load({
 			boxSizing: "border-box",
 		};
 		const ACTIONS = { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 };
+		const HELP_BADGE = {
+			display: "inline-flex",
+			alignItems: "center",
+			justifyContent: "center",
+			width: 16,
+			height: 16,
+			borderRadius: "50%",
+			border: "1px solid var(--dsw-alias-border-primary, #999)",
+			fontSize: 11,
+			lineHeight: "16px",
+			cursor: "help",
+			color: "var(--dsw-alias-label-secondary, #666)",
+			flexShrink: 0,
+		};
 
 		function parseRoles(textValue) {
 			const s = String(textValue || "").trim();
@@ -152,11 +178,19 @@ window.__ModuleLoader__.load({
 				enabled: r.enabled === false ? false : true,
 				claimKeyEnv: typeof r.claimKeyEnv === "string" ? r.claimKeyEnv : "",
 				mcpBearerEnv: typeof r.mcpBearerEnv === "string" ? r.mcpBearerEnv : "",
+				mcpPath: typeof r.mcpPath === "string" ? r.mcpPath : "",
+				mcpCommentTool: typeof r.mcpCommentTool === "string" ? r.mcpCommentTool : "",
+				postClaimComment: r.postClaimComment === false ? false : true,
 				cwd: typeof r.cwd === "string" ? r.cwd : "",
-				mode: typeof r.mode === "string" ? r.mode : "",
+				mode: r.mode === "dry-run" ? "dry-run" : r.mode === "harness" ? "harness" : "harness",
 				provider: typeof r.provider === "string" ? r.provider : "",
 				model: typeof r.model === "string" ? r.model : "",
 				sessionIdPrefix: typeof r.sessionIdPrefix === "string" ? r.sessionIdPrefix : "",
+				reuseSessionPerIssue: r.reuseSessionPerIssue === false ? false : (r.reuseSessionPerIssue === true ? true : undefined),
+				setSessionTitle: r.setSessionTitle === false ? false : (r.setSessionTitle === true ? true : undefined),
+				renameExistingSession: r.renameExistingSession === false ? false : (r.renameExistingSession === true ? true : undefined),
+				disposeAfterRun: r.disposeAfterRun === false ? false : (r.disposeAfterRun === true ? true : undefined),
+				mountPlanMcp: r.mountPlanMcp === false ? false : true,
 			};
 		}
 
@@ -169,17 +203,25 @@ window.__ModuleLoader__.load({
 					enabled: r.enabled !== false,
 					claimKeyEnv: String(r.claimKeyEnv || "").trim(),
 					mcpBearerEnv: String(r.mcpBearerEnv || "").trim(),
+					cwd: String(r.cwd || "").trim(),
+					mode: r.mode === "dry-run" ? "dry-run" : "harness",
+					postClaimComment: r.postClaimComment !== false,
+					mountPlanMcp: r.mountPlanMcp !== false,
 				};
-				const cwd = String(r.cwd || "").trim();
-				const modeVal = String(r.mode || "").trim();
+				const mcpPath = String(r.mcpPath || "").trim();
+				const mcpCommentTool = String(r.mcpCommentTool || "").trim();
 				const provider = String(r.provider || "").trim();
 				const model = String(r.model || "").trim();
 				const sessionIdPrefix = String(r.sessionIdPrefix || "").trim();
-				if (cwd) out.cwd = cwd;
-				if (modeVal) out.mode = modeVal;
+				if (mcpPath) out.mcpPath = mcpPath;
+				if (mcpCommentTool) out.mcpCommentTool = mcpCommentTool;
 				if (provider) out.provider = provider;
 				if (model) out.model = model;
 				if (sessionIdPrefix) out.sessionIdPrefix = sessionIdPrefix;
+				if (typeof r.reuseSessionPerIssue === "boolean") out.reuseSessionPerIssue = r.reuseSessionPerIssue;
+				if (typeof r.setSessionTitle === "boolean") out.setSessionTitle = r.setSessionTitle;
+				if (typeof r.renameExistingSession === "boolean") out.renameExistingSession = r.renameExistingSession;
+				if (typeof r.disposeAfterRun === "boolean") out.disposeAfterRun = r.disposeAfterRun;
 				return out;
 			});
 			return JSON.stringify(cleaned);
@@ -187,16 +229,24 @@ window.__ModuleLoader__.load({
 
 		function blankRole() {
 			return {
-				key: "",
-				role: "",
+				key: "dev",
+				role: "开发",
 				enabled: true,
-				claimKeyEnv: "",
+				claimKeyEnv: "ITSAPLAN_KEY_DEV",
 				mcpBearerEnv: "",
+				mcpPath: "",
+				mcpCommentTool: "",
+				postClaimComment: true,
 				cwd: "",
-				mode: "",
+				mode: "harness",
 				provider: "",
 				model: "",
 				sessionIdPrefix: "",
+				reuseSessionPerIssue: undefined,
+				setSessionTitle: undefined,
+				renameExistingSession: undefined,
+				disposeAfterRun: undefined,
+				mountPlanMcp: true,
 			};
 		}
 
@@ -212,6 +262,79 @@ window.__ModuleLoader__.load({
 						placeholder: props.placeholder || "",
 						onChange: (e) => props.onChange(e.target.value),
 					}),
+					props.hint ? jsx("span", { style: { ...LABEL, fontSize: 11, opacity: 0.85 }, children: props.hint }) : null,
+				],
+			});
+		}
+
+		function RoleBool(props) {
+			return jsxs("label", {
+				style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, fontSize: 12 },
+				children: [
+					jsx("span", { children: props.label }),
+					jsx(P.Switch, {
+						checked: props.value === true,
+						label: props.label,
+						disabled: props.disabled,
+						onChange: (c) => props.onChange(c),
+					}),
+				],
+			});
+		}
+
+		/** Mode <select> + 「？」 hover help (harness vs dry-run). */
+		function ModeSelect(props) {
+			return jsxs("label", {
+				style: FIELD,
+				children: [
+					jsxs("span", {
+						style: { display: "flex", alignItems: "center", gap: 6 },
+						children: [
+							jsx("span", { style: LABEL, children: props.label }),
+							jsx("span", {
+								style: HELP_BADGE,
+								title: props.hint,
+								"aria-label": props.hint,
+								children: "？",
+							}),
+						],
+					}),
+					jsxs("select", {
+						style: INPUT,
+						value: props.value === "dry-run" ? "dry-run" : "harness",
+						disabled: props.disabled,
+						onChange: (e) => props.onChange(e.target.value),
+						children: [
+							jsx("option", { value: "harness", children: "harness" }),
+							jsx("option", { value: "dry-run", children: "dry-run" }),
+						],
+					}),
+				],
+			});
+		}
+
+		/** Tri-state site-default override: undefined = inherit「全站默认」, true/false = override. */
+		function RoleBoolInherit(props) {
+			const val = props.value;
+			const selectVal = val === true ? "true" : val === false ? "false" : "inherit";
+			return jsxs("label", {
+				style: FIELD,
+				children: [
+					jsx("span", { style: LABEL, children: props.label }),
+					jsxs("select", {
+						style: INPUT,
+						value: selectVal,
+						disabled: props.disabled,
+						onChange: (e) => {
+							const v = e.target.value;
+							props.onChange(v === "inherit" ? undefined : v === "true");
+						},
+						children: [
+							jsx("option", { value: "inherit", children: "继承「全站默认」" }),
+							jsx("option", { value: "true", children: "是" }),
+							jsx("option", { value: "false", children: "否" }),
+						],
+					}),
 				],
 			});
 		}
@@ -219,16 +342,25 @@ window.__ModuleLoader__.load({
 		function RolesListEditor(props) {
 			const { t, disabled, fieldState, onEdit, onReset } = props;
 			const roles = parseRoles(fieldState.text);
+			const virtual = roles.length === 0;
+			const display = virtual ? [blankRole()] : roles;
 			const commit = (next) => onEdit(serializeRoles(next));
 
 			const patch = (index, patchObj) => {
+				if (virtual) {
+					commit([{ ...blankRole(), ...patchObj }]);
+					return;
+				}
 				commit(roles.map((r, i) => (i === index ? { ...r, ...patchObj } : r)));
 			};
-			const removeAt = (index) => commit(roles.filter((_, i) => i !== index));
-			const addRole = () => commit(roles.concat([blankRole()]));
-			const fillTemplate = () => commit(FIVE_ROLE_TEMPLATE.map((r) => ({ ...r })));
+			const removeAt = (index) => {
+				if (virtual) return;
+				commit(roles.filter((_, i) => i !== index));
+			};
+			const addRole = () => commit((virtual ? [] : roles).concat([blankRole()]));
+			const fillTemplate = () => commit(FIVE_ROLE_TEMPLATE.map((r) => ({ ...blankRole(), ...r })));
 
-			const rows = roles.map((role, index) =>
+			const rows = display.map((role, index) =>
 				jsxs(
 					"div",
 					{
@@ -247,36 +379,60 @@ window.__ModuleLoader__.load({
 												onChange: (c) => patch(index, { enabled: c }),
 											}),
 											jsx("span", { children: role.key || role.role || `#${index + 1}` }),
+											virtual ? jsx("span", { style: { ...LABEL, fontSize: 11 }, children: t("rolesEmptyHint") }) : null,
 										],
 									}),
-									jsx(P.Button, {
-										variant: "ghost",
-										size: "sm",
-										disabled,
-										onClick: () => removeAt(index),
-										icon: jsx(P.IconTrashOutlineRegular, { size: 14 }),
-										children: t("rolesRemove"),
-									}),
+									!virtual
+										? jsx(P.Button, {
+												variant: "ghost",
+												size: "sm",
+												disabled,
+												onClick: () => removeAt(index),
+												icon: jsx(P.IconTrashOutlineRegular, { size: 14 }),
+												children: t("rolesRemove"),
+											})
+										: null,
 								],
 							}),
+							jsx("div", { style: SECTION, children: t("sectionIdentity") }),
 							jsxs("div", {
 								style: GRID,
 								children: [
 									jsx(RoleField, { label: t("roleKey"), value: role.key, disabled, placeholder: "dev", onChange: (v) => patch(index, { key: v }) }),
 									jsx(RoleField, { label: t("roleDisplay"), value: role.role, disabled, placeholder: "开发", onChange: (v) => patch(index, { role: v }) }),
-									jsx(RoleField, { label: t("claimKeyEnv"), value: role.claimKeyEnv, disabled, placeholder: "ITSAPLAN_KEY_DEV", onChange: (v) => patch(index, { claimKeyEnv: v }) }),
-									jsx(RoleField, { label: t("mcpBearerEnv"), value: role.mcpBearerEnv, disabled, placeholder: t("mcpBearerEnvHint"), onChange: (v) => patch(index, { mcpBearerEnv: v }) }),
 								],
 							}),
-							jsx("div", { style: { ...LABEL, marginTop: 4 }, children: t("roleOptional") }),
+							jsx("div", { style: SECTION, children: t("sectionConn") }),
 							jsxs("div", {
 								style: GRID,
 								children: [
-									jsx(RoleField, { label: t("cwd"), value: role.cwd, disabled, onChange: (v) => patch(index, { cwd: v }) }),
-									jsx(RoleField, { label: t("mode"), value: role.mode, disabled, placeholder: "harness | dry-run", onChange: (v) => patch(index, { mode: v }) }),
-									jsx(RoleField, { label: t("provider"), value: role.provider, disabled, onChange: (v) => patch(index, { provider: v }) }),
-									jsx(RoleField, { label: t("model"), value: role.model, disabled, onChange: (v) => patch(index, { model: v }) }),
-									jsx(RoleField, { label: t("sessionIdPrefix"), value: role.sessionIdPrefix, disabled, onChange: (v) => patch(index, { sessionIdPrefix: v }) }),
+									jsx(RoleField, { label: t("claimKeyEnv"), value: role.claimKeyEnv, disabled, placeholder: "ITSAPLAN_KEY_DEV", hint: t("claimKeyEnvHint"), onChange: (v) => patch(index, { claimKeyEnv: v }) }),
+									jsx(RoleField, { label: t("mcpBearerEnv"), value: role.mcpBearerEnv, disabled, placeholder: t("mcpBearerEnvHint"), onChange: (v) => patch(index, { mcpBearerEnv: v }) }),
+									jsx(RoleField, { label: t("mcpPath"), value: role.mcpPath, disabled, placeholder: "/mcp", hint: t("mcpPathHint"), onChange: (v) => patch(index, { mcpPath: v }) }),
+									jsx(RoleField, { label: t("mcpCommentTool"), value: role.mcpCommentTool, disabled, placeholder: "create_issue_comment", hint: t("mcpCommentToolHint"), onChange: (v) => patch(index, { mcpCommentTool: v }) }),
+								],
+							}),
+							jsx(RoleBool, { label: t("postClaimComment"), value: role.postClaimComment !== false, disabled, onChange: (c) => patch(index, { postClaimComment: c }) }),
+							jsx("div", { style: SECTION, children: t("sectionRun") }),
+							jsxs("div", {
+								style: GRID,
+								children: [
+									jsx(ModeSelect, { label: t("mode"), value: role.mode, hint: t("modeHint"), disabled, onChange: (v) => patch(index, { mode: v }) }),
+									jsx(RoleField, { label: t("cwd"), value: role.cwd, disabled, placeholder: "可选，留空 = 不设 cwd", hint: t("cwdHint"), onChange: (v) => patch(index, { cwd: v }) }),
+									jsx(RoleField, { label: t("provider"), value: role.provider, disabled, placeholder: t("providerHint"), onChange: (v) => patch(index, { provider: v }) }),
+									jsx(RoleField, { label: t("model"), value: role.model, disabled, placeholder: t("modelHint"), onChange: (v) => patch(index, { model: v }) }),
+								],
+							}),
+							jsx(RoleBool, { label: t("mountPlanMcp"), value: role.mountPlanMcp !== false, disabled, onChange: (c) => patch(index, { mountPlanMcp: c }) }),
+							jsx("div", { style: SECTION, children: t("sectionSession") }),
+							jsxs("div", {
+								style: GRID,
+								children: [
+									jsx(RoleField, { label: t("sessionIdPrefix"), value: role.sessionIdPrefix, disabled, placeholder: "dhs-aplan-dev-", onChange: (v) => patch(index, { sessionIdPrefix: v }) }),
+									jsx(RoleBoolInherit, { label: t("reuseSessionPerIssue"), value: role.reuseSessionPerIssue, disabled, onChange: (v) => patch(index, { reuseSessionPerIssue: v }) }),
+									jsx(RoleBoolInherit, { label: t("setSessionTitle"), value: role.setSessionTitle, disabled, onChange: (v) => patch(index, { setSessionTitle: v }) }),
+									jsx(RoleBoolInherit, { label: t("renameExistingSession"), value: role.renameExistingSession, disabled, onChange: (v) => patch(index, { renameExistingSession: v }) }),
+									jsx(RoleBoolInherit, { label: t("disposeAfterRun"), value: role.disposeAfterRun, disabled, onChange: (v) => patch(index, { disposeAfterRun: v }) }),
 								],
 							}),
 						],
@@ -307,7 +463,6 @@ window.__ModuleLoader__.load({
 						style: { margin: "4px 0 0", fontSize: 12, color: "var(--dsw-alias-label-secondary, #666)" },
 						children: fieldState.invalid ? t("invalidJson") : t("rolesHint"),
 					}),
-					roles.length === 0 ? jsx("p", { style: { margin: "8px 0 0", fontSize: 12, opacity: 0.8 }, children: t("rolesEmpty") }) : null,
 					...rows,
 					jsxs("div", {
 						style: ACTIONS,
@@ -340,7 +495,19 @@ window.__ModuleLoader__.load({
 			const disabled = !state.writable || state.saving;
 			const children = [];
 			for (const [group, items] of FIELDS) {
-				children.push(jsx("h4", { style: { margin: "12px 0 0", fontSize: 13, fontWeight: 600 }, children: t(group) }, "g-" + group));
+				const title =
+					group === "groupSiteSession"
+						? t("groupSiteSession")
+						: t(group);
+				children.push(jsx("h4", { style: { margin: "12px 0 0", fontSize: 13, fontWeight: 600 }, children: title }, "g-" + group));
+				if (group === "groupSiteSession") {
+					children.push(
+						jsx("p", {
+							style: { margin: "4px 0 0", fontSize: 12, color: "var(--dsw-alias-label-secondary, #666)" },
+							children: t("siteDefaults") + " — 角色卡可逐项覆盖；未覆盖则用这里。",
+						}, "hint-" + group),
+					);
+				}
 				for (const [f, mk] of items) {
 					const fs = state.fields[f];
 					if (f === "roles") {
@@ -373,7 +540,7 @@ window.__ModuleLoader__.load({
 						hint: zh[hintKey] ? t(hintKey) : void 0,
 						overriddenLabel: t("overridden"),
 						resetLabel: t("reset"),
-						invalidLabel: t(f === "mode" ? "invalidMode" : "invalid"),
+						invalidLabel: t("invalid"),
 						numeric: mk === num,
 						disabled,
 						...fs,
