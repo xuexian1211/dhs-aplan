@@ -70,7 +70,7 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
 
   const roles = read()
   console.log(
-    `[dhs-aplan] 0.3.1 loaded roles=${roles.map((r) => `${r.role}:${r.mode}`).join(',') || '(none)'} baseUrl=${
+    `[dhs-aplan] 0.3.2 loaded roles=${roles.map((r) => `${r.role}:${r.mode}`).join(',') || '(none)'} baseUrl=${
       roles[0]?.baseUrl ?? defaultConfig.baseUrl
     } gui=${ConfigSchema ? 'on' : 'off'}`,
   )

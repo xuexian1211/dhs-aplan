@@ -84,3 +84,7 @@ Desktop generation 已装时，只把 `dist/`、`package.json`、`cordis.patch.y
 - GUI 页是手写的客户端 bundle（DSH 模块工厂格式），依赖 `dsh-client-ui-primitives` 的 `SettingsFormModel/SettingsForm/SettingsValueField/Switch`；DSH 升级若改动这些接口，表单可能不显示（插件本身不受影响）。
 - `roles` 在 GUI 中以 JSON 编辑。
 - Key 仍放 Windows 用户环境变量；DSH 进程需能看到。
+
+## 多角色（GUI）
+
+插件页「配置」→「多角色」为可增删列表（类似 CodexHub 账号列表）。空列表 = 只用上方单角色默认（开发）。点「填入五角色模板」可写入需求分析/架构/开发/评审/测试五行，环境变量名分别为 ITSAPLAN_KEY_REQ|SWA|DEV|REVIEW|TEST 与对应 ITSAPLAN_MCP_*（开发 MCP 可留空复用领取 Key）。只填变量名，不存密钥。
