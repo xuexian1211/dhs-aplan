@@ -90,6 +90,12 @@ Desktop generation 已装时，只把 `dist/`、`package.json`、`cordis.patch.y
 插件页「配置」→「多角色」为可增删列表（类似 CodexHub 账号列表）。空列表 = 只用上方单角色默认（开发）。点「填入五角色模板」可写入需求分析/架构/开发/评审/测试五行，环境变量名分别为 APLAN_KEY_REQ|SWA|DEV|REVIEW|TEST 与对应 APLAN_MCP_*（开发 MCP 可留空复用领取 Key）。只填变量名，不存密钥。
 
 
+## 0.3.22
+
+- GUI 高级选项全中文：模式选项「正式领取（harness）/试跑（dry-run）」；工作区权限三档中文标签；推理等级高/中/低等。
+- 去掉无效「？」tooltip，改为字段下可见备注（与 RoleField 一致）。
+- `tr()`：当 DSH `locale.bind` 回退返回 key 本身时，改用内置中文，避免 UI 泄漏 `permissionPresetStandard` 等 i18n key。
+
 ## 0.3.21
 
 - 角色「工作区权限」对齐 DSH Desktop 原生三档：`read-only`（仅可查看）/ `workspace-write`（工作区内修改）/ `danger-full-access`（完全权限）；GUI 中文标签与会话权限选择器一致。

@@ -64,7 +64,9 @@ window.__ModuleLoader__.load({
 			enabled: "启用", enabledHint: "关闭后插件不再领取任何角色的 run。",
 			baseUrl: "Plan 地址", baseUrlHint: "例如 http://192.168.10.146:8001",
 			mode: "模式",
-			modeHint: "harness = 真实 Agent 回合；dry-run = 只领取/评论后直接回 success（联调用，不跑 Harness）。",
+			modeHint: "正式领取（harness）= 真实 Agent 回合并开会话；试跑（dry-run）= 只领取/评论后直接回 success（联调用，不跑 Harness）。",
+			modeHarness: "正式领取（harness）",
+			modeDryRun: "试跑（dry-run）",
 			role: "角色名（会话标题显示）",
 			claimKeyEnv: "领取 Key 环境变量名", claimKeyEnvHint: "填环境变量名（不是 Key 本身），例如 APLAN_KEY_DEV。",
 			mcpBearerEnv: "MCP 写回 Key 环境变量名", mcpBearerEnvHint: "留空 = 复用领取 Key。",
@@ -94,8 +96,8 @@ window.__ModuleLoader__.load({
 			sectionIdentity: "身份",
 			sectionConn: "连接与 Key",
 			sectionRun: "运行",
-			permissionPreset: "会话权限",
-			permissionPresetHint: "对应 DSH 会话权限三档：仅可查看=read-only，工作区内修改=workspace-write，完全权限=danger-full-access。dev/test 默认完全权限，其它角色默认工作区内修改。新建/续跑会写入会话。",
+			permissionPreset: "工作区权限",
+			permissionPresetHint: "三档与 DSH 会话权限一致：仅可查看（read-only）、工作区内修改（workspace-write）、完全权限（danger-full-access）。dev/test 默认完全权限，其它角色默认工作区内修改；新建/续跑写入会话。",
 			permissionPresetViewOnly: "仅可查看",
 			permissionPresetStandard: "工作区内修改",
 			permissionPresetFull: "完全权限",
@@ -137,7 +139,13 @@ window.__ModuleLoader__.load({
 			statusHint: "暂停 = 关闭该角色「启用」。Key 存在于 DSH 凭据库（%APPDATA%\\dsh-desktop\\harness\\.credentials.yaml），不进 cordis.patch。",
 			pauseRole: "启用（关闭=暂停领取）",
 			reasoningEffort: "推理等级",
-			reasoningEffortHint: "写入 AgentOptions.reasoningEffort。默认 high。取值依模型而定（off/minimal/low/medium/high/xhigh）。",
+			reasoningEffortHint: "写入 AgentOptions.reasoningEffort。默认「高」。取值依模型而定。",
+			reasoningOff: "关闭（off）",
+			reasoningMinimal: "最低（minimal）",
+			reasoningLow: "低（low）",
+			reasoningMedium: "中（medium）",
+			reasoningHigh: "高（high）",
+			reasoningXhigh: "极高（xhigh）",
 			archiveDoneThreads: "自动归档（完成/取消的 Issue 会话）",
 			fixRuntimeAcl: "启动时修复工作区 .runtime ACL",
 			fixRuntimeAclHint: "Windows：对每个角色 cwd 下 .runtime 执行 takeown/授权当前用户/移除 Everyone DENY/Medium IL。默认开启；关闭则跳过。",
@@ -152,9 +160,11 @@ window.__ModuleLoader__.load({
 		};
 		const en = Object.assign({}, zh, {
 			description: "It's a Plan external agent: claim → Harness session → report.",
-			modeHint: "harness = real Agent turn; dry-run = claim/comment then success without a Harness turn (for integration tests).",
+			modeHint: "harness = real Agent turn + session; dry-run = claim/comment then success without a Harness turn (integration tests).",
+			modeHarness: "Run (harness)",
+			modeDryRun: "Dry-run",
 			cwd: "Working directory (absolute, optional)", cwdHint: "Empty = no cwd / session stays ungrouped. Must be absolute when set.",
-			permissionPreset: "Session permission",
+			permissionPreset: "Workspace permission",
 			permissionPresetHint: "Maps to DSH session permission: View Only=read-only; Modify within Workspace=workspace-write; Full Permissions=danger-full-access. Defaults: dev/test → full; others → workspace-write. Applied on create/reuse.",
 			permissionPresetViewOnly: "View Only",
 			permissionPresetStandard: "Modify within Workspace",
@@ -207,6 +217,12 @@ window.__ModuleLoader__.load({
 			pauseRole: "Enabled (off = pause claiming)",
 			reasoningEffort: "Reasoning level",
 			reasoningEffortHint: "Passed as AgentOptions.reasoningEffort; default high (empty = model default).",
+			reasoningOff: "off",
+			reasoningMinimal: "minimal",
+			reasoningLow: "low",
+			reasoningMedium: "medium",
+			reasoningHigh: "high",
+			reasoningXhigh: "xhigh",
 			archiveDoneThreads: "Auto-archive (completed/canceled issue sessions)",
 			archiveDoneThreadsHint: "CodexHub parity. DSH has no Plan-column archive API yet; enabling only logs (prefer dry-run first).",
 			archiveDryRun: "Archive dry-run (log only)",
@@ -296,6 +312,18 @@ window.__ModuleLoader__.load({
 			color: "var(--dsw-alias-label-secondary, #666)",
 			flexShrink: 0,
 		};
+
+		/** DSH locale.bind returns the key when missing (truthy), so t(k)||fallback never works. */
+		function tr(t, key, fallback) {
+			try {
+				const v = typeof t === "function" ? t(key) : null;
+				if (typeof v === "string" && v.length && v !== key) return v;
+			} catch (_) {}
+			if (typeof fallback === "string" && fallback.length) return fallback;
+			if (zh && typeof zh[key] === "string") return zh[key];
+			return key;
+		}
+
 
 		function parseRoles(textValue) {
 			const s = String(textValue || "").trim();
@@ -628,12 +656,12 @@ window.__ModuleLoader__.load({
 						onChange: (e) => props.onChange(e.target.value),
 						children: [
 							selectOption("", "模型默认"),
-							selectOption("off", "off"),
-							selectOption("minimal", "minimal"),
-							selectOption("low", "low"),
-							selectOption("medium", "medium"),
-							selectOption("high", "high"),
-							selectOption("xhigh", "xhigh"),
+							selectOption("off", props.offLabel || "关闭（off）"),
+							selectOption("minimal", props.minimalLabel || "最低（minimal）"),
+							selectOption("low", props.lowLabel || "低（low）"),
+							selectOption("medium", props.mediumLabel || "中（medium）"),
+							selectOption("high", props.highLabel || "高（high）"),
+							selectOption("xhigh", props.xhighLabel || "极高（xhigh）"),
 						],
 					}),
 					props.hint ? jsx("span", { style: { ...LABEL, fontSize: 11, opacity: 0.85 }, children: props.hint }) : null,
@@ -673,33 +701,23 @@ function RoleField(props) {
 			});
 		}
 
-		/** Mode <select> + 「？」 hover help (harness vs dry-run). */
+		/** Mode <select>: Chinese labels, store harness|dry-run; inline 备注 (DSH title tooltips unreliable). */
 		function ModeSelect(props) {
 			return jsxs("label", {
 				style: FIELD,
 				children: [
-					jsxs("span", {
-						style: { display: "flex", alignItems: "center", gap: 6 },
-						children: [
-							jsx("span", { style: LABEL, children: props.label }),
-							jsx("span", {
-								style: HELP_BADGE,
-								title: props.hint,
-								"aria-label": props.hint,
-								children: "？",
-							}),
-						],
-					}),
+					jsx("span", { style: LABEL, children: props.label }),
 					jsxs("select", {
 						style: SELECT,
 						value: props.value === "dry-run" ? "dry-run" : "harness",
 						disabled: props.disabled,
 						onChange: (e) => props.onChange(e.target.value),
 						children: [
-							selectOption("harness", "harness"),
-							selectOption("dry-run", "dry-run"),
+							selectOption("harness", props.harnessLabel || "正式领取（harness）"),
+							selectOption("dry-run", props.dryRunLabel || "试跑（dry-run）"),
 						],
 					}),
+					props.hint ? jsx("span", { style: { ...LABEL, fontSize: 11, opacity: 0.85 }, children: props.hint }) : null,
 				],
 			});
 		}
@@ -731,36 +749,30 @@ function RoleField(props) {
 		}
 
 
-		/** DSH session permission preset: read-only | workspace-write | danger-full-access (native three Chinese levels). */
+		/** DSH session permission: store read-only|workspace-write|danger-full-access; show Chinese; inline 备注. */
 		function PermissionPresetSelect(props) {
 			const allowed = ["read-only", "workspace-write", "danger-full-access"];
 			const v = allowed.includes(props.value) ? props.value : "workspace-write";
+			// Never pass raw i18n keys as labels — t(key) may return key (truthy), defeating || fallback.
+			const viewOnly = props.viewOnlyLabel && props.viewOnlyLabel !== "permissionPresetViewOnly" ? props.viewOnlyLabel : "仅可查看";
+			const standard = props.standardLabel && props.standardLabel !== "permissionPresetStandard" ? props.standardLabel : "工作区内修改";
+			const full = props.fullLabel && props.fullLabel !== "permissionPresetFull" ? props.fullLabel : "完全权限";
 			return jsxs("label", {
 				style: FIELD,
 				children: [
-					jsxs("span", {
-						style: { display: "flex", alignItems: "center", gap: 6 },
-						children: [
-							jsx("span", { style: LABEL, children: props.label }),
-							jsx("span", {
-								style: HELP_BADGE,
-								title: props.hint,
-								"aria-label": props.hint,
-								children: "?",
-							}),
-						],
-					}),
+					jsx("span", { style: LABEL, children: props.label }),
 					jsxs("select", {
 						style: SELECT,
 						value: v,
 						disabled: props.disabled,
 						onChange: (e) => props.onChange(e.target.value),
 						children: [
-							selectOption("read-only", props.viewOnlyLabel || "仅可查看"),
-							selectOption("workspace-write", props.standardLabel || "工作区内修改"),
-							selectOption("danger-full-access", props.fullLabel || "完全权限"),
+							selectOption("read-only", viewOnly),
+							selectOption("workspace-write", standard),
+							selectOption("danger-full-access", full),
 						],
 					}),
+					props.hint ? jsx("span", { style: { ...LABEL, fontSize: 11, opacity: 0.85 }, children: props.hint }) : null,
 				],
 			});
 		}
@@ -931,7 +943,7 @@ function RoleField(props) {
 											jsxs("div", {
 												style: GRID,
 												children: [
-													jsx(ModeSelect, { label: t("mode"), value: role.mode, hint: t("modeHint"), disabled, onChange: (v) => patch(index, { mode: v }) }),
+													jsx(ModeSelect, { label: tr(t, "mode", "模式"), value: role.mode, hint: tr(t, "modeHint"), harnessLabel: tr(t, "modeHarness", "正式领取（harness）"), dryRunLabel: tr(t, "modeDryRun", "试跑（dry-run）"), disabled, onChange: (v) => patch(index, { mode: v }) }),
 													jsx("div", { style: { gridColumn: "1 / -1" }, children: jsx(CwdCombobox, {
 														t,
 														value: role.cwd,
@@ -941,17 +953,17 @@ function RoleField(props) {
 													}) }),
 													jsx("div", { style: { gridColumn: "1 / -1" }, children: jsx(RoleField, { label: t("provider"), value: role.provider, disabled, placeholder: t("providerHint"), onChange: (v) => patch(index, { provider: v }) }) }),
 													jsx(RoleField, { label: t("model"), value: role.model, disabled, placeholder: t("modelHint"), onChange: (v) => patch(index, { model: v }) }),
-													jsx(EffortSelect, { label: t("reasoningEffort"), value: role.reasoningEffort, hint: t("reasoningEffortHint"), disabled, onChange: (v) => patch(index, { reasoningEffort: v }) }),
+													jsx(EffortSelect, { label: tr(t, "reasoningEffort", "推理等级"), value: role.reasoningEffort, hint: tr(t, "reasoningEffortHint"), offLabel: tr(t, "reasoningOff", "关闭（off）"), minimalLabel: tr(t, "reasoningMinimal", "最低（minimal）"), lowLabel: tr(t, "reasoningLow", "低（low）"), mediumLabel: tr(t, "reasoningMedium", "中（medium）"), highLabel: tr(t, "reasoningHigh", "高（high）"), xhighLabel: tr(t, "reasoningXhigh", "极高（xhigh）"), disabled, onChange: (v) => patch(index, { reasoningEffort: v }) }),
 												],
 											}),
 											jsx(RoleBool, { label: t("mountPlanMcp"), value: role.mountPlanMcp !== false, disabled, onChange: (_c) => patch(index, { mountPlanMcp: true }) }),
-											jsx("div", { style: SECTION, children: t("sectionPermission") }),
+											jsx("div", { style: SECTION, children: tr(t, "sectionPermission", "工作区权限") }),
 											jsx(PermissionPresetSelect, {
-												label: t("permissionPreset"),
-												hint: t("permissionPresetHint"),
-												viewOnlyLabel: t("permissionPresetViewOnly"),
-												standardLabel: t("permissionPresetStandard"),
-												fullLabel: t("permissionPresetFull"),
+												label: tr(t, "permissionPreset", "工作区权限"),
+												hint: tr(t, "permissionPresetHint"),
+												viewOnlyLabel: tr(t, "permissionPresetViewOnly", "仅可查看"),
+												standardLabel: tr(t, "permissionPresetStandard", "工作区内修改"),
+												fullLabel: tr(t, "permissionPresetFull", "完全权限"),
 												value: role.permissionPreset || (role.key === "dev" || role.key === "test" ? "danger-full-access" : "workspace-write"),
 												disabled,
 												onChange: (v) => patch(index, { permissionPreset: v }),
@@ -1214,15 +1226,15 @@ function RoleField(props) {
 					if (mk === bool) {
 						children.push(jsxs("label", {
 							style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, fontSize: 13 },
-							children: [jsx("span", { children: t(f) }), jsx(P.Switch, { checked: fs.text === "true", label: t(f), disabled, onChange: (c) => props.edit(f, c ? "true" : "false") })],
+							children: [jsx("span", { children: tr(t, f, zh[f] || f) }), jsx(P.Switch, { checked: fs.text === "true", label: tr(t, f, zh[f] || f), disabled, onChange: (c) => props.edit(f, c ? "true" : "false") })],
 						}, f));
 						continue;
 					}
 					const hintKey = f + "Hint";
 					children.push(jsx(P.SettingsValueField, {
 						id: "dsh-aplan-" + f,
-						label: t(f),
-						hint: zh[hintKey] ? t(hintKey) : void 0,
+						label: tr(t, f, zh[f] || f),
+						hint: zh[hintKey] ? tr(t, hintKey) : void 0,
 						overriddenLabel: t("overridden"),
 						resetLabel: t("reset"),
 						invalidLabel: t("invalid"),
