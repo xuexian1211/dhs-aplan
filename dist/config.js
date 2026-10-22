@@ -67,6 +67,10 @@ function base(raw) {
     }
     // Plan MCP tools required for every role session (harness or dry-run).
     out.mountPlanMcp = true;
+    // Never dispose AgentHandle after a turn — that removes the session from the
+    // live Host registry (session/disposed → api-session/removed). Keep sessions
+    // visible for audit; plugin dispose / runner.stop only abort the claim lock.
+    out.disposeAfterRun = false;
     return out;
 }
 /**
@@ -109,7 +113,7 @@ export function resolveRoles(raw) {
             mode: pick(r.mode, top.mode),
             sessionIdPrefix: pick(r.sessionIdPrefix, `${top.sessionIdPrefix}${key}-`),
             reuseSessionPerIssue: pickBool(r.reuseSessionPerIssue, top.reuseSessionPerIssue),
-            disposeAfterRun: pickBool(r.disposeAfterRun, top.disposeAfterRun),
+            disposeAfterRun: false, // never dispose session after a turn (audit)
             mountPlanMcp: true, // always on; per-role false broke AE-133 req
             setSessionTitle: pickBool(r.setSessionTitle, top.setSessionTitle),
             renameExistingSession: pickBool(r.renameExistingSession, top.renameExistingSession),

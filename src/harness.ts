@@ -7,6 +7,7 @@ import type { Config } from './config.js'
 import type { PlanRun } from './plan-client.js'
 import { mountPlanMcpTools } from './plan-mcp-tools.js'
 import { sessionTitleForRun } from './title.js'
+import { hostCtx } from './host-ctx.js'
 
 /** Side-effect imports so Context gains `agents` / `systemPrompt` typings. */
 import '@deepseek-ai/dsh-agent'
@@ -48,7 +49,10 @@ export async function runHarnessTurn(
   log: HarnessLogFn,
   options: HarnessTurnOptions = {},
 ): Promise<string> {
-  if (typeof ctx.agents?.create !== 'function') {
+  // Own agent lifecycle on the host (root) fiber — see host-ctx.ts. Plugin remount
+  // must only stop claim loops, never dispose AgentHandles (audit trail).
+  const agents = hostCtx(ctx).agents
+  if (typeof agents?.create !== 'function') {
     throw new Error(
       'dhs-aplan mode=harness requires ctx.agents (load @deepseek-ai/dsh-agent + dsh-agent-loop in the profile)',
     )
@@ -67,14 +71,14 @@ export async function runHarnessTurn(
   let agent: Agent
   let createdFresh = false
 
-  const live = ctx.agents.get(sessionId)
+  const live = agents.get(sessionId)
   if (config.reuseSessionPerIssue && live) {
     log(`${tag} harness reuse live session=${sessionId}`)
     agent = live
     await setup(agent.ctx)
   } else if (config.reuseSessionPerIssue) {
     try {
-      handle = await ctx.agents.resume({
+      handle = await agents.resume({
         resumeSessionId: sessionId,
         ...(agentOptions ? { agentOptions } : {}),
         setup,
@@ -84,7 +88,7 @@ export async function runHarnessTurn(
     } catch (resumeErr) {
       const reason = resumeErr instanceof Error ? resumeErr.message : String(resumeErr)
       log(`${tag} harness resume skipped (${reason}); creating session=${sessionId}`)
-      handle = await ctx.agents.create({
+      handle = await agents.create({
         sessionId,
         ...(agentOptions ? { agentOptions } : {}),
         ...(meta ? { meta } : {}),
@@ -95,7 +99,7 @@ export async function runHarnessTurn(
       log(`${tag} harness created session=${sessionId}`)
     }
   } else {
-    handle = await ctx.agents.create({
+    handle = await agents.create({
       sessionId,
       ...(agentOptions ? { agentOptions } : {}),
       ...(meta ? { meta } : {}),
@@ -383,3 +387,4 @@ function extractAssistantOutput(agent: Agent): string {
   const text = parts.join('').trim()
   return text || '[dhs-aplan harness] last assistant message had empty text content.'
 }
+

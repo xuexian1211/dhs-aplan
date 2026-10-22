@@ -3,12 +3,16 @@ import { SessionId } from '@deepseek-ai/dsh-session';
 import path from 'node:path';
 import { mountPlanMcpTools } from './plan-mcp-tools.js';
 import { sessionTitleForRun } from './title.js';
+import { hostCtx } from './host-ctx.js';
 /** Side-effect imports so Context gains `agents` / `systemPrompt` typings. */
 import '@deepseek-ai/dsh-agent';
 import '@deepseek-ai/dsh-system-prompt';
 const PLAN_SYSTEM_SECTION = 'dhs-aplan:plan-system-prompt';
 export async function runHarnessTurn(ctx, config, run, log, options = {}) {
-    if (typeof ctx.agents?.create !== 'function') {
+    // Own agent lifecycle on the host (root) fiber — see host-ctx.ts. Plugin remount
+    // must only stop claim loops, never dispose AgentHandles (audit trail).
+    const agents = hostCtx(ctx).agents;
+    if (typeof agents?.create !== 'function') {
         throw new Error('dhs-aplan mode=harness requires ctx.agents (load @deepseek-ai/dsh-agent + dsh-agent-loop in the profile)');
     }
     const tag = config.roleKey ? `[dhs-aplan:${config.roleKey}]` : '[dhs-aplan]';
@@ -22,7 +26,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
     let handle;
     let agent;
     let createdFresh = false;
-    const live = ctx.agents.get(sessionId);
+    const live = agents.get(sessionId);
     if (config.reuseSessionPerIssue && live) {
         log(`${tag} harness reuse live session=${sessionId}`);
         agent = live;
@@ -30,7 +34,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
     }
     else if (config.reuseSessionPerIssue) {
         try {
-            handle = await ctx.agents.resume({
+            handle = await agents.resume({
                 resumeSessionId: sessionId,
                 ...(agentOptions ? { agentOptions } : {}),
                 setup,
@@ -41,7 +45,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
         catch (resumeErr) {
             const reason = resumeErr instanceof Error ? resumeErr.message : String(resumeErr);
             log(`${tag} harness resume skipped (${reason}); creating session=${sessionId}`);
-            handle = await ctx.agents.create({
+            handle = await agents.create({
                 sessionId,
                 ...(agentOptions ? { agentOptions } : {}),
                 ...(meta ? { meta } : {}),
@@ -53,7 +57,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
         }
     }
     else {
-        handle = await ctx.agents.create({
+        handle = await agents.create({
             sessionId,
             ...(agentOptions ? { agentOptions } : {}),
             ...(meta ? { meta } : {}),

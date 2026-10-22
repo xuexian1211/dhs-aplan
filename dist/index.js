@@ -4,6 +4,7 @@ import { defaultConfig, resolveRoles, configSignature } from './config.js';
 import { RoleRunner } from './runner.js';
 import { ConfigSchema } from './schema.js';
 import { patchStatus, publishRuntimeStatus, removeStatus } from './status.js';
+import { rehydrateAplanSessions } from './rehydrate.js';
 export const name = 'dhs-aplan';
 /** Cordis: agents required; workspaceRegistry used to attach sessions into the UI workspace tree. */
 export const inject = ['agents', 'workspaceRegistry'];
@@ -107,7 +108,21 @@ export function apply(ctx, rawConfig = {}) {
         }
     }, log);
     ctx.effect(() => {
-        const first = setTimeout(() => void reconcile(), 0);
+        let rehydrated = false;
+        const boot = async () => {
+            await reconcile();
+            if (disposed || rehydrated)
+                return;
+            rehydrated = true;
+            try {
+                const configs = await read();
+                await rehydrateAplanSessions(ctx, configs, log);
+            }
+            catch (err) {
+                log(`[dhs-aplan] rehydrate boot failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        };
+        const first = setTimeout(() => void boot(), 0);
         const timer = setInterval(() => void reconcile(), RECONCILE_MS);
         return () => {
             disposed = true;
@@ -120,7 +135,7 @@ export function apply(ctx, rawConfig = {}) {
             console.log('[dhs-aplan] DISPOSED — claim loops stop requested');
         };
     });
-    console.log(`[dhs-aplan] 0.3.10 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
+    console.log(`[dhs-aplan] 0.3.12 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
 }
 function snapshot(raw) {
     const out = {};

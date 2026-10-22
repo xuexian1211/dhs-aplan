@@ -1,0 +1,183 @@
+import type { Context } from '@deepseek-ai/cordis'
+import type { AgentOptions } from '@deepseek-ai/dsh-agent'
+import { SessionId } from '@deepseek-ai/dsh-session'
+import fs from 'node:fs'
+import path from 'node:path'
+import type { Config } from './config.js'
+import { hostCtx } from './host-ctx.js'
+import { mountPlanMcpTools } from './plan-mcp-tools.js'
+
+/** Side-effect imports so Context gains `agents` typings. */
+import '@deepseek-ai/dsh-agent'
+
+export type RehydrateLogFn = (msg: string) => void
+
+type WorkspaceEntity = {
+  record?: { path?: string; title?: string; sessionIds?: string[] }
+}
+
+type WorkspaceRegistry = {
+  resolveByPath: (path: string) => Promise<WorkspaceEntity | undefined>
+}
+
+type HomePaths = {
+  sessions?: string
+}
+
+/**
+ * Re-register persisted dhs-aplan sessions on the host (root) fiber so they
+ * reappear in the workbench after a plugin config reload. Session files are
+ * never deleted; Cordis dispose of the plugin fiber only unregisters live
+ * agents that were created on that fiber.
+ */
+export async function rehydrateAplanSessions(
+  ctx: Context,
+  configs: Config[],
+  log: RehydrateLogFn,
+): Promise<void> {
+  const host = hostCtx(ctx)
+  if (typeof host.agents?.resume !== 'function') {
+    log('[dhs-aplan] rehydrate skipped: agents.resume unavailable')
+    return
+  }
+
+  const byPrefix = [...configs]
+    .filter((c) => c.reuseSessionPerIssue)
+    .sort((a, b) => b.sessionIdPrefix.length - a.sessionIdPrefix.length)
+
+  if (!byPrefix.length) {
+    log('[dhs-aplan] rehydrate skipped: no reuseSessionPerIssue roles')
+    return
+  }
+
+  const seen = new Set<string>()
+  let resumed = 0
+  let skippedLive = 0
+  let failed = 0
+
+  for (const cfg of byPrefix) {
+    const cwd = (cfg.cwd || '').trim()
+    if (!cwd) continue
+    const ids = await collectSessionIds(host, cwd, cfg.sessionIdPrefix, log)
+    for (const rawId of ids) {
+      if (seen.has(rawId)) continue
+      seen.add(rawId)
+      const role = matchRole(byPrefix, rawId)
+      if (!role) continue
+      const sessionId = SessionId(rawId)
+      if (host.agents.get(sessionId)) {
+        skippedLive += 1
+        continue
+      }
+      try {
+        const agentOptions = buildAgentOptions(role)
+        await host.agents.resume({
+          resumeSessionId: sessionId,
+          ...(agentOptions ? { agentOptions } : {}),
+          setup: async (agentCtx: Context) => {
+            await mountPlanMcpTools(agentCtx, role, log)
+          },
+        })
+        resumed += 1
+        log(`[dhs-aplan:${role.roleKey || '_'}] rehydrated session=${rawId}`)
+      } catch (err) {
+        failed += 1
+        log(
+          `[dhs-aplan:${role.roleKey || '_'}] rehydrate failed session=${rawId}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
+      }
+    }
+  }
+
+  log(
+    `[dhs-aplan] rehydrate done resumed=${resumed} alreadyLive=${skippedLive} failed=${failed} scanned=${seen.size}`,
+  )
+}
+
+function matchRole(roles: Config[], sessionId: string): Config | undefined {
+  for (const r of roles) {
+    if (sessionId.startsWith(r.sessionIdPrefix)) return r
+  }
+  return undefined
+}
+
+function buildAgentOptions(config: Config): AgentOptions | undefined {
+  const provider = config.provider.trim()
+  const model = config.model.trim()
+  const effort = (config.reasoningEffort || '').trim()
+  if (!provider && !model) return undefined
+  return {
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+    ...(effort ? { reasoningEffort: effort as never } : {}),
+  }
+}
+
+async function collectSessionIds(
+  ctx: Context,
+  cwd: string,
+  prefix: string,
+  log: RehydrateLogFn,
+): Promise<string[]> {
+  const out = new Set<string>()
+
+  const registry =
+    (ctx as Context & { workspaceRegistry?: WorkspaceRegistry }).workspaceRegistry ??
+    (ctx as { get?: (name: string) => WorkspaceRegistry | undefined }).get?.('workspaceRegistry')
+  if (registry?.resolveByPath) {
+    try {
+      const entity = await registry.resolveByPath(cwd)
+      for (const id of entity?.record?.sessionIds ?? []) {
+        if (typeof id === 'string' && id.startsWith(prefix)) out.add(id)
+      }
+    } catch (err) {
+      log(
+        `[dhs-aplan] rehydrate workspace list failed cwd=${cwd}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      )
+    }
+  }
+
+  for (const id of listDiskSessionIds(ctx, cwd, prefix)) out.add(id)
+  return [...out]
+}
+
+/** Best-effort scan of the harness sessions bucket for this cwd. */
+function listDiskSessionIds(ctx: Context, cwd: string, prefix: string): string[] {
+  try {
+    const root = resolveSessionsRoot(ctx)
+    if (!root) return []
+    const slug = cwdToSlug(cwd)
+    const dir = path.join(root, slug)
+    if (!fs.existsSync(dir)) return []
+    return fs
+      .readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.startsWith(prefix) && !d.name.includes('.bak'))
+      .map((d) => d.name)
+  } catch {
+    return []
+  }
+}
+
+function resolveSessionsRoot(ctx: Context): string | undefined {
+  try {
+    const home =
+      (ctx as Context & { homePaths?: HomePaths }).homePaths ??
+      (ctx as { get?: (name: string) => HomePaths | undefined }).get?.('homePaths')
+    if (home?.sessions && typeof home.sessions === 'string') return home.sessions
+    const appdata = process.env.APPDATA || process.env.HOME
+    if (!appdata) return undefined
+    return path.join(appdata, 'dsh-desktop', 'harness', 'sessions')
+  } catch {
+    return undefined
+  }
+}
+
+/** Match DSH bucket naming: E:\\WorkSpaces\\aida700-ERP → --E-WorkSpaces-aida700-ERP-- */
+function cwdToSlug(cwd: string): string {
+  const normalized = path.resolve(cwd).replace(/[/\\]+/g, '-').replace(/:/g, '')
+  return `--${normalized}--`
+}

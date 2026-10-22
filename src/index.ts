@@ -12,6 +12,7 @@ import { defaultConfig, resolveRoles, configSignature, type Config as ResolvedCo
 import { RoleRunner } from './runner.js'
 import { ConfigSchema } from './schema.js'
 import { patchStatus, publishRuntimeStatus, removeStatus } from './status.js'
+import { rehydrateAplanSessions } from './rehydrate.js'
 
 export const name = 'dhs-aplan'
 
@@ -135,7 +136,23 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
   }, log)
 
   ctx.effect(() => {
-    const first = setTimeout(() => void reconcile(), 0)
+    let rehydrated = false
+    const boot = async () => {
+      await reconcile()
+      if (disposed || rehydrated) return
+      rehydrated = true
+      try {
+        const configs = await read()
+        await rehydrateAplanSessions(ctx, configs, log)
+      } catch (err) {
+        log(
+          `[dhs-aplan] rehydrate boot failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
+      }
+    }
+    const first = setTimeout(() => void boot(), 0)
     const timer = setInterval(() => void reconcile(), RECONCILE_MS)
     return () => {
       disposed = true
@@ -149,7 +166,7 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
   })
 
   console.log(
-    `[dhs-aplan] 0.3.10 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
+    `[dhs-aplan] 0.3.12 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
   )
 }
 
