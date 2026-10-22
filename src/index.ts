@@ -144,7 +144,7 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
   })
 
   console.log(
-    `[dhs-aplan] 0.3.7 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
+    `[dhs-aplan] 0.3.8 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
   )
 }
 

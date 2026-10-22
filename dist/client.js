@@ -3,7 +3,7 @@
 // Slot must use options.key = package name ("dhs-aplan"); plugin-manager matches
 // plugins.bundle.config via entryKey: pkg.name (keyed slot), not id.
 //
-// Layout (0.3.7): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
+// Layout (0.3.8): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
 // Per-role cards: Identity + Connection secret fields (claimKey/mcpBearer password) + status; claimKeyEnv/mcpBearerEnv in advanced;
 // mcpPath + mcpCommentTool + Run + Session collapse into default-closed 「高级选项」 accordion
 // (expand state per card, component state only).
@@ -1148,19 +1148,27 @@ function RoleField(props) {
 		}
 
 		// configForms preferred but soft-failed: keyed slot still registers.
-		const inject = ["slots", "locale"];
+		const inject = ["slots", "locale", "remote", "configForms"];
 		function apply(ctx) {
 			const t = ctx.locale.bind(NS);
 			let card = null;
+			// Stable snapshot required: useSyncExternalStore infinite-loops (React #185)
+			// if getSnapshot returns a new object every call — that abdicated the
+			// plugins.bundle.config entry so the 配置 section rendered empty.
+			const EMPTY_FIELDS = Object.fromEntries(SPECS.map((spec) => [spec.field, { text: "", overridden: false, invalid: false }]));
+			const EMPTY_SNAPSHOT = Object.freeze({
+				writable: false,
+				saving: false,
+				fields: EMPTY_FIELDS,
+				status: "unavailable",
+				runtimeList: Object.freeze([]),
+				runtimeByKey: Object.freeze({}),
+				credByRef: Object.freeze({}),
+			});
 			const emptyInject = () => ({
 				hooks: {
 					aplanCard: {
-						getSnapshot: () => ({
-							writable: false,
-							saving: false,
-							fields: Object.fromEntries(SPECS.map((s) => [s.field, { text: "", overridden: false, invalid: false }])),
-							status: "unavailable",
-						}),
+						getSnapshot: () => EMPTY_SNAPSHOT,
 						subscribe: () => () => {},
 					},
 				},
@@ -1173,7 +1181,7 @@ function RoleField(props) {
 			// Register keyed slot FIRST (before locale/form/credentials). DSH 0.1.7 plugin
 			// detail only shows 配置 when ledger.bundles has options.key === pkg.name.
 			// Any throw in later setup must not skip this (same symptom as key/id bug).
-			ctx.slots.inject("plugins.bundle.config", () =>
+			ctx.slots.inject("plugins.bundle.config", () => {
 				ctx.slots.register(
 					{
 						name: "plugins.bundle.config",
@@ -1184,12 +1192,17 @@ function RoleField(props) {
 						inject: () => (card ? card.inject() : emptyInject()),
 					},
 					AplanCard,
-				),
-			);
-			console.info("[dhs-aplan] plugins.bundle.config registered key=" + PACKAGE_KEY);
+				);
+				console.info("[dhs-aplan] plugins.bundle.config slot live key=" + PACKAGE_KEY);
+			});
+			console.info("[dhs-aplan] plugins.bundle.config inject armed key=" + PACKAGE_KEY);
 
+			// Never touch ctx.remote unless declared in inject — cordis throws
+			// "cannot get property remote without inject" and that used to abort
+			// Controller setup, leaving emptyInject (which then React-#185'd).
+			Controller._remoteCredentials = null;
 			try {
-				Controller._remoteCredentials = (ctx.remote && ctx.remote.credentials) ? ctx.remote.credentials : null;
+				if (ctx.remote && ctx.remote.credentials) Controller._remoteCredentials = ctx.remote.credentials;
 			} catch (_) { Controller._remoteCredentials = null; }
 			if (!Controller._remoteCredentials && ctx.reflect && typeof ctx.reflect.get === "function") {
 				try {
@@ -1239,7 +1252,13 @@ function RoleField(props) {
 						try { card.dispose(); } catch (_) {}
 						card = null;
 					}
-					const remoteCred = (typeof ctx !== "undefined" && ctx.remote && ctx.remote.credentials) ? ctx.remote.credentials : (Controller._remoteCredentials || null);
+					let remoteCred = Controller._remoteCredentials || null;
+					if (!remoteCred && ctx.reflect && typeof ctx.reflect.get === "function") {
+						try {
+							const remote = ctx.reflect.get("remote", false);
+							if (remote && remote.credentials) remoteCred = remote.credentials;
+						} catch (_) {}
+					}
 					card = new Controller(forms.get(CONFIG_NS), remoteCred);
 				} catch (err) {
 					console.warn("[dhs-aplan] configForms soft-fail:", err && err.message ? err.message : err);
