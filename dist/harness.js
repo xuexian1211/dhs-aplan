@@ -89,6 +89,9 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
     let timer;
     let onAbort;
     try {
+        // Capture pre-followup assistant history so a blocked/empty turn cannot
+        // reuse a prior interrupted reasoning-only message as a false success.
+        const assistantBaseline = snapshotAssistantBaseline(agent);
         agent.followup(createUserMessage({
             content: [{ type: 'text', text: run.prompt }],
             source: { kind: 'user' },
@@ -120,7 +123,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
             const message = turnError instanceof Error ? turnError.message : String(turnError);
             throw new Error(`harness session error: ${message}`);
         }
-        const output = extractAssistantOutput(agent);
+        const output = extractAssistantOutput(agent, assistantBaseline);
         if (output.startsWith('[dhs-aplan harness]')) {
             throw new Error(output);
         }
@@ -276,20 +279,85 @@ function installPlanSystemPrompt(agentCtx, run) {
         interpolate: false,
     });
 }
-function extractAssistantOutput(agent) {
-    const messages = agent.session.deriveMessages();
-    const assistants = messages.filter((m) => m.role === 'assistant');
+function snapshotAssistantBaseline(agent) {
+    const assistants = agent.session.deriveMessages().filter((m) => m.role === 'assistant');
     const last = assistants.at(-1);
-    if (!last) {
-        return '[dhs-aplan harness] agent went idle but no assistant message was produced.';
+    return {
+        lastAssistantId: last && typeof last.id === 'string' ? last.id : null,
+        assistantCount: assistants.length,
+    };
+}
+/**
+ * True when the joined extraction is only `[type]` placeholders (e.g. `[reasoning]`),
+ * with no real assistant text. Those used to look non-empty (11 chars) and false-succeed.
+ */
+export function isPlaceholderOnlyOutput(raw) {
+    const t = raw.trim();
+    if (!t)
+        return true;
+    return /^(?:\[[^\]]+\])+$/i.test(t);
+}
+function summarizeAssistantContent(content) {
+    const textParts = [];
+    const placeholders = [];
+    const toolNames = [];
+    for (const block of content) {
+        const type = block?.type;
+        if (type === 'text') {
+            textParts.push(typeof block.text === 'string' ? block.text : '');
+        }
+        else if (type === 'tool-call') {
+            toolNames.push(typeof block.name === 'string' && block.name ? block.name : 'tool-call');
+        }
+        else if (typeof type === 'string' && type.length > 0) {
+            placeholders.push(`[${type}]`);
+        }
     }
-    const parts = [];
-    for (const block of last.content) {
-        if (block.type === 'text')
-            parts.push(block.text);
-        else
-            parts.push(`[${block.type}]`);
+    return {
+        realText: textParts.join('').trim(),
+        placeholders,
+        toolNames,
+    };
+}
+/**
+ * Extract success-gate output for this harness run only.
+ * - Ignores assistants that existed before the followup (no reuse of prior `[reasoning]`).
+ * - Placeholder-only content (`[reasoning]`, `[thinking]`, …) counts as empty → error string.
+ * - Succeeds with real text, or with evidence of tool-calls produced this run.
+ */
+function extractAssistantOutput(agent, baseline) {
+    const assistants = agent.session.deriveMessages().filter((m) => m.role === 'assistant');
+    let startIdx = baseline.assistantCount;
+    if (baseline.lastAssistantId) {
+        const byId = assistants.findIndex((m) => m.id === baseline.lastAssistantId);
+        if (byId >= 0)
+            startIdx = byId + 1;
     }
-    const text = parts.join('').trim();
-    return text || '[dhs-aplan harness] last assistant message had empty text content.';
+    const produced = assistants.slice(Math.max(0, startIdx));
+    if (produced.length === 0) {
+        return '[dhs-aplan harness] agent went idle but no new assistant message was produced this turn.';
+    }
+    let anyRealText = false;
+    let anyTools = false;
+    const toolNames = [];
+    let lastRealText = '';
+    for (const m of produced) {
+        const summary = summarizeAssistantContent(m.content);
+        if (summary.realText) {
+            anyRealText = true;
+            lastRealText = summary.realText;
+        }
+        if (summary.toolNames.length > 0) {
+            anyTools = true;
+            toolNames.push(...summary.toolNames);
+        }
+    }
+    if (anyRealText)
+        return lastRealText;
+    if (anyTools) {
+        const uniq = [...new Set(toolNames)];
+        return `(tools this turn: ${uniq.join(', ')})`;
+    }
+    // Reasoning/thinking-only (or other `[type]` placeholders) → same failure as empty text.
+    return '[dhs-aplan harness] last assistant message had empty text content.';
 }

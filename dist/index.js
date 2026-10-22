@@ -135,7 +135,7 @@ export function apply(ctx, rawConfig = {}) {
             console.log('[dhs-aplan] DISPOSED — claim loops stop requested');
         };
     });
-    console.log(`[dhs-aplan] 0.3.16 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
+    console.log(`[dhs-aplan] 0.3.17 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
 }
 function snapshot(raw) {
     const out = {};
