@@ -1,5 +1,5 @@
 import { McpClient } from './mcp-client.js';
-const MOUNTED = Symbol.for('dhs-aplan.planMcpMounted');
+const MOUNTED = Symbol.for('dsh-aplan.planMcpMounted');
 /** Tools Plan prompts name by default; missing any is a hard mount failure. */
 const REQUIRED_PLAN_TOOLS = ['get_project', 'add_comment', 'update_issue', 'get_issue'];
 /**
@@ -7,7 +7,7 @@ const REQUIRED_PLAN_TOOLS = ['get_project', 'add_comment', 'update_issue', 'get_
  * (add_comment, get_issue, …) so Plan prompts that name those tools work.
  */
 export async function mountPlanMcpTools(agentCtx, config, log) {
-    const tag = config.roleKey ? `[dhs-aplan:${config.roleKey}]` : '[dhs-aplan]';
+    const tag = config.roleKey ? `[dsh-aplan:${config.roleKey}]` : '[dsh-aplan]';
     // Force-mount even if a stale per-role flag says false (AE-133 req).
     if (config.mountPlanMcp === false) {
         log(`${tag} CRITICAL: mountPlanMcp=false ignored; forcing Plan MCP tools (silent skip caused AE-133 tool gap)`);
@@ -89,7 +89,7 @@ export async function mountPlanMcpTools(agentCtx, config, log) {
     // Help the model when Plan prompts say "add_comment" and tools are present under that exact name.
     if (typeof agentCtx.systemPrompt?.section === 'function') {
         agentCtx.systemPrompt.section({
-            name: 'dhs-aplan:plan-mcp-tools',
+            name: 'dsh-aplan:plan-mcp-tools',
             order: 1400,
             text: [
                 'Its a Plan MCP tools are available under their native names (for example add_comment, get_project, update_issue, get_issue, get_issue_by_number).',

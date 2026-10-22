@@ -9,15 +9,15 @@ import { ensureWorkspaceAttached } from './workspace-attach.js';
 /** Side-effect imports so Context gains `agents` / `systemPrompt` typings. */
 import '@deepseek-ai/dsh-agent';
 import '@deepseek-ai/dsh-system-prompt';
-const PLAN_SYSTEM_SECTION = 'dhs-aplan:plan-system-prompt';
+const PLAN_SYSTEM_SECTION = 'dsh-aplan:plan-system-prompt';
 export async function runHarnessTurn(ctx, config, run, log, options = {}) {
     // Own agent lifecycle on the host (root) fiber — see host-ctx.ts. Plugin remount
     // must only stop claim loops, never dispose AgentHandles (audit trail).
     const agents = hostCtx(ctx).agents;
     if (typeof agents?.create !== 'function') {
-        throw new Error('dhs-aplan mode=harness requires ctx.agents (load @deepseek-ai/dsh-agent + dsh-agent-loop in the profile)');
+        throw new Error('dsh-aplan mode=harness requires ctx.agents (load @deepseek-ai/dsh-agent + dsh-agent-loop in the profile)');
     }
-    const tag = config.roleKey ? `[dhs-aplan:${config.roleKey}]` : '[dhs-aplan]';
+    const tag = config.roleKey ? `[dsh-aplan:${config.roleKey}]` : '[dsh-aplan]';
     const sessionId = SessionId(buildSessionId(config, run));
     const agentOptions = buildAgentOptions(ctx, config, log, tag);
     const meta = buildSessionMeta(config);
@@ -110,7 +110,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
             stoppers.push(new Promise((_, reject) => {
                 onAbort = () => {
                     interruptAgent(agent, log, tag);
-                    reject(new Error('dhs-aplan runner stopped during the turn (plugin disposed / config changed)'));
+                    reject(new Error('dsh-aplan runner stopped during the turn (plugin disposed / config changed)'));
                 };
                 if (options.signal.aborted)
                     onAbort();
@@ -124,7 +124,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
             throw new Error(`harness session error: ${message}`);
         }
         const output = extractAssistantOutput(agent, assistantBaseline);
-        if (output.startsWith('[dhs-aplan harness]')) {
+        if (output.startsWith('[dsh-aplan harness]')) {
             throw new Error(output);
         }
         log(`${tag} harness idle run=${run.id} session=${sessionId} outputChars=${output.length}`);
@@ -148,7 +148,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
     }
 }
 export function buildSessionId(config, run) {
-    const prefix = (config.sessionIdPrefix || 'dhs-aplan-').trim() || 'dhs-aplan-';
+    const prefix = (config.sessionIdPrefix || 'dsh-aplan-').trim() || 'dsh-aplan-';
     if (config.reuseSessionPerIssue) {
         const key = (run.issueIdentifier && run.issueIdentifier.trim()) ||
             (run.issueId != null ? `issue-${run.issueId}` : `run-${run.id}`);
@@ -242,7 +242,7 @@ function buildSessionMeta(config) {
     // Omitting it leaves harness agents with Plan MCP only — no tool-fs/shell/git.
     const cwd = config.cwd.trim();
     if (cwd && !path.isAbsolute(cwd)) {
-        throw new Error(`dhs-aplan config.cwd must be an absolute path, got: ${cwd}`);
+        throw new Error(`dsh-aplan config.cwd must be an absolute path, got: ${cwd}`);
     }
     const agentPreset = 'standard';
     return {
@@ -268,7 +268,7 @@ function installPlanSystemPrompt(agentCtx, run) {
     if (!text)
         return;
     if (typeof agentCtx.systemPrompt?.section !== 'function') {
-        throw new Error('dhs-aplan mode=harness requires ctx.systemPrompt (load @deepseek-ai/dsh-system-prompt)');
+        throw new Error('dsh-aplan mode=harness requires ctx.systemPrompt (load @deepseek-ai/dsh-system-prompt)');
     }
     // Unique per run so reuseSessionPerIssue can re-register without colliding.
     const name = `${PLAN_SYSTEM_SECTION}:${run.id}`;
@@ -335,7 +335,7 @@ function extractAssistantOutput(agent, baseline) {
     }
     const produced = assistants.slice(Math.max(0, startIdx));
     if (produced.length === 0) {
-        return '[dhs-aplan harness] agent went idle but no new assistant message was produced this turn.';
+        return '[dsh-aplan harness] agent went idle but no new assistant message was produced this turn.';
     }
     let anyRealText = false;
     let anyTools = false;
@@ -359,5 +359,5 @@ function extractAssistantOutput(agent, baseline) {
         return `(tools this turn: ${uniq.join(', ')})`;
     }
     // Reasoning/thinking-only (or other `[type]` placeholders) → same failure as empty text.
-    return '[dhs-aplan harness] last assistant message had empty text content.';
+    return '[dsh-aplan harness] last assistant message had empty text content.';
 }

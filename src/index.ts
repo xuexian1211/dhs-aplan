@@ -14,7 +14,7 @@ import { ConfigSchema } from './schema.js'
 import { patchStatus, publishRuntimeStatus, removeStatus } from './status.js'
 import { rehydrateAplanSessions } from './rehydrate.js'
 
-export const name = 'dhs-aplan'
+export const name = 'dsh-aplan'
 
 /** Cordis: agents required; workspaceRegistry used to attach sessions into the UI workspace tree. */
 export const inject = ['agents', 'workspaceRegistry'] as const
@@ -62,7 +62,7 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
           mcpValue = mcp.value
           if (!mcpValue) {
             log(
-              `[dhs-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] WARN: mcpBearerEnv=${cfg.mcpBearerEnv} resolved empty; Plan MCP will fall back to claim key`,
+              `[dsh-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] WARN: mcpBearerEnv=${cfg.mcpBearerEnv} resolved empty; Plan MCP will fall back to claim key`,
             )
           }
         }
@@ -77,7 +77,7 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
       }
       return out
     } catch (err) {
-      log(`[dhs-aplan] config error: ${err instanceof Error ? err.message : String(err)}`)
+      log(`[dsh-aplan] config error: ${err instanceof Error ? err.message : String(err)}`)
       return []
     }
   }
@@ -114,7 +114,7 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
       if (runners.has(key) || disposed) continue
       if (!cfg.claimKey) {
         log(
-          `[dhs-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] missing claim key (ref ${cfg.claimKeyEnv || aplanKeyRef(cfg.roleKey || 'DEV')}); idle`,
+          `[dsh-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] missing claim key (ref ${cfg.claimKeyEnv || aplanKeyRef(cfg.roleKey || 'DEV')}); idle`,
         )
         patchStatus(cfg.roleKey, { role: cfg.role, state: 'no-key' })
         continue
@@ -146,7 +146,7 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
         await rehydrateAplanSessions(ctx, configs, log)
       } catch (err) {
         log(
-          `[dhs-aplan] rehydrate boot failed: ${
+          `[dsh-aplan] rehydrate boot failed: ${
             err instanceof Error ? err.message : String(err)
           }`,
         )
@@ -161,12 +161,12 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
       stopArchive()
       for (const { runner } of runners.values()) void runner.stop('plugin disposed')
       runners.clear()
-      console.log('[dhs-aplan] DISPOSED — claim loops stop requested')
+      console.log('[dsh-aplan] DISPOSED — claim loops stop requested')
     }
   })
 
   console.log(
-    `[dhs-aplan] 0.3.17 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
+    `[dsh-aplan] 0.3.18 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
   )
 }
 

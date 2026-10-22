@@ -56,7 +56,7 @@ export class McpClient {
     await this.rpc('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
-      clientInfo: { name: 'dhs-aplan', version: '0.2.3' },
+      clientInfo: { name: 'dsh-aplan', version: '0.2.3' },
     })
     // notifications/initialized has no id in some servers; ignore failures
     try {

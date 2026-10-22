@@ -25,7 +25,7 @@ export const defaultConfig = {
     provider: '',
     model: '',
     reasoningEffort: 'high',
-    sessionIdPrefix: 'dhs-aplan-',
+    sessionIdPrefix: 'dsh-aplan-',
     reuseSessionPerIssue: true,
     disposeAfterRun: false,
     mountPlanMcp: true,

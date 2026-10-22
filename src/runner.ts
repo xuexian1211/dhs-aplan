@@ -20,7 +20,7 @@ export class RoleRunner {
     private readonly config: Config,
     private readonly log: LogFn = console.log,
   ) {
-    this.tag = config.roleKey ? `[dhs-aplan:${config.roleKey}]` : '[dhs-aplan]'
+    this.tag = config.roleKey ? `[dsh-aplan:${config.roleKey}]` : '[dsh-aplan]'
   }
 
   get label(): string {
@@ -51,7 +51,7 @@ export class RoleRunner {
     if (cur && !cur.reported) {
       cur.reported = true
       try {
-        await cur.plan.reportRun(cur.run.id, { status: 'failed', error: `dhs-aplan ${reason}` })
+        await cur.plan.reportRun(cur.run.id, { status: 'failed', error: `dsh-aplan ${reason}` })
         this.log(`${this.tag} reported in-flight run=${cur.run.id} failed (${reason})`)
       } catch (e) {
         this.log(`${this.tag} could not report in-flight run=${cur.run.id}: ${e instanceof Error ? e.message : e}`)
@@ -88,7 +88,7 @@ export class RoleRunner {
         const run = await plan.claimRun()
         if (this.stopped) {
           if (run) {
-            await plan.reportRun(run.id, { status: 'failed', error: 'dhs-aplan runner stopping; retry' }).catch(() => {})
+            await plan.reportRun(run.id, { status: 'failed', error: 'dsh-aplan runner stopping; retry' }).catch(() => {})
           }
           break
         }
@@ -187,7 +187,7 @@ export class RoleRunner {
 
       if (this.config.mode === 'dry-run') {
         const output = [
-          `[dhs-aplan dry-run] claimed by ${this.config.role} role; Harness turn not executed.`,
+          `[dsh-aplan dry-run] claimed by ${this.config.role} role; Harness turn not executed.`,
           `issue=${label}`,
           `trigger=${run.trigger}`,
           '--- systemPrompt ---',
@@ -234,7 +234,7 @@ export class RoleRunner {
       await mcp.initialize()
       await mcp.callTool(this.config.mcpCommentTool, {
         issueId: run.issueId,
-        body: `【${this.config.role}·dhs-aplan】已领取 run #${run.id}（mode=${this.config.mode}）。`,
+        body: `【${this.config.role}·dsh-aplan】已领取 run #${run.id}（mode=${this.config.mode}）。`,
       })
       this.log(`${this.tag} MCP comment posted issueId=${run.issueId}`)
     } catch (err) {

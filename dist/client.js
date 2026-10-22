@@ -1,6 +1,6 @@
-// dhs-aplan browser half: settings page on Plugins → dhs-aplan (plugins.bundle.config slot).
+// dsh-aplan browser half: settings page on Plugins → dsh-aplan (plugins.bundle.config slot).
 // Hand-written in the DSH client-module factory format (no bundler needed).
-// Slot must use options.key = package name ("dhs-aplan"); plugin-manager matches
+// Slot must use options.key = package name ("dsh-aplan"); plugin-manager matches
 // plugins.bundle.config via entryKey: pkg.name (keyed slot), not id.
 //
 // Layout (0.3.9): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
@@ -9,7 +9,7 @@
 // (expand state per card, component state only).
 // cwd = combobox of known workspaces + 「浏览…」 via Desktop __DSH_DIRECTORY_PICKER__.
 window.__ModuleLoader__.load({
-	id: "dhs-aplan",
+	id: "dsh-aplan",
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -20,8 +20,8 @@ window.__ModuleLoader__.load({
 		const P = require("@deepseek-ai/dsh-client-ui-primitives");
 
 		const NS = "settings.dhsAplan";
-		const CONFIG_NS = "dhs-aplan";
-		const PACKAGE_KEY = "dhs-aplan";
+		const CONFIG_NS = "dsh-aplan";
+		const PACKAGE_KEY = "dsh-aplan";
 		/** Write-only secret drafts keyed by role key; flushed on Save via credentials remote. Never persisted in roles[]. */
 		const pendingSecrets = new Map();
 		function autoKeyRef(roleKey) {
@@ -59,7 +59,7 @@ window.__ModuleLoader__.load({
 		];
 
 		const zh = {
-			title: "dhs-aplan（It's a Plan）",
+			title: "dsh-aplan（It's a Plan）",
 			description: "It's a Plan 外部 Agent 领取 → Harness 会话 → 回写结果。",
 			enabled: "启用", enabledHint: "关闭后插件不再领取任何角色的 run。",
 			baseUrl: "Plan 地址", baseUrlHint: "例如 http://192.168.10.146:8001",
@@ -102,7 +102,7 @@ window.__ModuleLoader__.load({
 			siteDefaults: "全站默认",
 			invalid: "格式不对", invalidMode: "只能是 harness 或 dry-run", invalidJson: "需要 JSON 数组",
 			overridden: "已覆盖", reset: "恢复默认",
-			readOnly: "本部署的设置为只读。", unavailable: "dhs-aplan 未加载（或缺少 schema），暂时无法配置。",
+			readOnly: "本部署的设置为只读。", unavailable: "dsh-aplan 未加载（或缺少 schema），暂时无法配置。",
 			save: "保存", saving: "保存中…", saveFailed: "部署没有接受这些值，已保留供你修改。",
 			groupGlobal: "全局", groupArchive: "自动归档", groupSiteSession: "全站默认 · 会话", groupRoles: "角色",
 			claimKey: "领取 Key", claimKeyHint: "直接粘贴 API Key（密码框）；保存后写入 DSH 凭据库，不会写进 patch。已保存则留空保持。",
@@ -362,7 +362,7 @@ window.__ModuleLoader__.load({
 		}
 
 
-		const CWD_HISTORY_KEY = "dhs-aplan-cwd-history";
+		const CWD_HISTORY_KEY = "dsh-aplan-cwd-history";
 		const CWD_HISTORY_MAX = 20;
 		/** Soft-filled from apply() when uiWorkspace is available. */
 		let knownWorkspacePaths = [];
@@ -428,7 +428,7 @@ window.__ModuleLoader__.load({
 					const path = await desktop.pick();
 					return typeof path === "string" && path ? path : null;
 				} catch (err) {
-					console.warn("[dhs-aplan] __DSH_DIRECTORY_PICKER__.pick failed:", err);
+					console.warn("[dsh-aplan] __DSH_DIRECTORY_PICKER__.pick failed:", err);
 				}
 			}
 			return pickDirectoryViaWebkit();
@@ -476,7 +476,7 @@ window.__ModuleLoader__.load({
 					document.body.appendChild(input);
 					input.click();
 				} catch (err) {
-					console.warn("[dhs-aplan] webkitdirectory fallback failed:", err);
+					console.warn("[dsh-aplan] webkitdirectory fallback failed:", err);
 					resolve(null);
 				}
 			});
@@ -484,7 +484,7 @@ window.__ModuleLoader__.load({
 
 		function CwdCombobox(props) {
 			const { t, value, disabled, onChange } = props;
-			const listId = props.listId || "dhs-aplan-cwd-list";
+			const listId = props.listId || "dsh-aplan-cwd-list";
 			const options = useMemo(() => collectKnownCwds(value), [value, knownWorkspacePaths.join("\0")]);
 			const browsing = useRef(false);
 			const onBrowse = async () => {
@@ -496,7 +496,7 @@ window.__ModuleLoader__.load({
 						pushCwdHistory(picked);
 						onChange(picked);
 					} else if (!globalThis.__DSH_DIRECTORY_PICKER__ && !globalThis.__DSH_HOST_PATHS__) {
-						console.warn("[dhs-aplan]", t("cwdBrowseUnavailable"));
+						console.warn("[dsh-aplan]", t("cwdBrowseUnavailable"));
 					}
 				} finally {
 					browsing.current = false;
@@ -866,7 +866,7 @@ function RoleField(props) {
 														t,
 														value: role.cwd,
 														disabled,
-														listId: "dhs-aplan-cwd-list-" + cardKey,
+														listId: "dsh-aplan-cwd-list-" + cardKey,
 														onChange: (v) => patch(index, { cwd: v }),
 													}) }),
 													jsx("div", { style: { gridColumn: "1 / -1" }, children: jsx(RoleField, { label: t("provider"), value: role.provider, disabled, placeholder: t("providerHint"), onChange: (v) => patch(index, { provider: v }) }) }),
@@ -879,7 +879,7 @@ function RoleField(props) {
 											jsxs("div", {
 												style: GRID,
 												children: [
-													jsx(RoleField, { label: t("sessionIdPrefix"), value: role.sessionIdPrefix, disabled, placeholder: "dhs-aplan-dev-", onChange: (v) => patch(index, { sessionIdPrefix: v }) }),
+													jsx(RoleField, { label: t("sessionIdPrefix"), value: role.sessionIdPrefix, disabled, placeholder: "dsh-aplan-dev-", onChange: (v) => patch(index, { sessionIdPrefix: v }) }),
 													jsx(RoleBoolInherit, { label: t("reuseSessionPerIssue"), value: role.reuseSessionPerIssue, disabled, onChange: (v) => patch(index, { reuseSessionPerIssue: v }) }),
 													jsx(RoleBoolInherit, { label: t("setSessionTitle"), value: role.setSessionTitle, disabled, onChange: (v) => patch(index, { setSessionTitle: v }) }),
 													jsx(RoleBoolInherit, { label: t("renameExistingSession"), value: role.renameExistingSession, disabled, onChange: (v) => patch(index, { renameExistingSession: v }) }),
@@ -1002,7 +1002,7 @@ function RoleField(props) {
 					}
 					const hintKey = f + "Hint";
 					children.push(jsx(P.SettingsValueField, {
-						id: "dhs-aplan-" + f,
+						id: "dsh-aplan-" + f,
 						label: t(f),
 						hint: zh[hintKey] ? t(hintKey) : void 0,
 						overriddenLabel: t("overridden"),
@@ -1127,7 +1127,7 @@ function RoleField(props) {
 							}
 						}
 					} catch (err) {
-						console.warn("[dhs-aplan] credentials.set failed", err && err.message ? err.message : err);
+						console.warn("[dsh-aplan] credentials.set failed", err && err.message ? err.message : err);
 						return false;
 					}
 					pendingSecrets.delete(cardKey);
@@ -1206,9 +1206,9 @@ function RoleField(props) {
 					},
 					AplanCard,
 				);
-				console.info("[dhs-aplan] plugins.bundle.config slot live key=" + PACKAGE_KEY);
+				console.info("[dsh-aplan] plugins.bundle.config slot live key=" + PACKAGE_KEY);
 			});
-			console.info("[dhs-aplan] plugins.bundle.config inject armed key=" + PACKAGE_KEY);
+			console.info("[dsh-aplan] plugins.bundle.config inject armed key=" + PACKAGE_KEY);
 
 			// Never touch ctx.remote unless declared in inject — cordis throws
 			// "cannot get property remote without inject" and that used to abort
@@ -1225,9 +1225,9 @@ function RoleField(props) {
 			}
 
 			try {
-				ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dhs-aplan: dictionaries");
+				ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dsh-aplan: dictionaries");
 			} catch (err) {
-				console.warn("[dhs-aplan] locale.register soft-fail:", err && err.message ? err.message : err);
+				console.warn("[dsh-aplan] locale.register soft-fail:", err && err.message ? err.message : err);
 			}
 
 			// Soft-read DSH workspace registry paths for cwd datalist (no hard inject).
@@ -1251,10 +1251,10 @@ function RoleField(props) {
 								} catch (_) {}
 								return () => { try { unsub && unsub(); } catch (_) {} };
 							}),
-						"dhs-aplan: workspaces",
+						"dsh-aplan: workspaces",
 					);
 				} catch (err) {
-					console.warn("[dhs-aplan] uiWorkspace soft-fail:", err && err.message ? err.message : err);
+					console.warn("[dsh-aplan] uiWorkspace soft-fail:", err && err.message ? err.message : err);
 				}
 			}
 
@@ -1274,7 +1274,7 @@ function RoleField(props) {
 					}
 					card = new Controller(forms.get(CONFIG_NS), remoteCred);
 				} catch (err) {
-					console.warn("[dhs-aplan] configForms soft-fail:", err && err.message ? err.message : err);
+					console.warn("[dsh-aplan] configForms soft-fail:", err && err.message ? err.message : err);
 					card = null;
 				}
 			};
@@ -1284,7 +1284,7 @@ function RoleField(props) {
 					: null;
 				attachForm(forms);
 			} catch (err) {
-				console.warn("[dhs-aplan] configForms soft-fail:", err && err.message ? err.message : err);
+				console.warn("[dsh-aplan] configForms soft-fail:", err && err.message ? err.message : err);
 			}
 			if (typeof ctx.inject === "function") {
 				try {
@@ -1297,13 +1297,13 @@ function RoleField(props) {
 									card = null;
 								};
 							}),
-						"dhs-aplan: form",
+						"dsh-aplan: form",
 					);
 				} catch (err) {
-					console.warn("[dhs-aplan] configForms inject soft-fail:", err && err.message ? err.message : err);
+					console.warn("[dsh-aplan] configForms inject soft-fail:", err && err.message ? err.message : err);
 				}
 			} else if (card) {
-				ctx.effect(() => () => { try { card && card.dispose(); } catch (_) {} }, "dhs-aplan: form");
+				ctx.effect(() => () => { try { card && card.dispose(); } catch (_) {} }, "dsh-aplan: form");
 			}
 		}
 		exports.NS = NS;

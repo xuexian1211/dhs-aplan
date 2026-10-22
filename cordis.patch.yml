@@ -1,9 +1,9 @@
-# dhs-aplan bundle layer — applied when a profile lists this bundle.
-# All fields are editable in DSH: 插件 → dhs-aplan → 配置 (saved to the profile patch, applied live).
+# dsh-aplan bundle layer — applied when a profile lists this bundle.
+# All fields are editable in DSH: 插件 → dsh-aplan → 配置 (saved to the profile patch, applied live).
 # Keys: prefer GUI secret fields (DSH credentials store). *Env fields are ref names (APLAN_*), never key values.
 - insert:
-    - id: dhs-aplan
-      name: dhs-aplan
+    - id: dsh-aplan
+      name: dsh-aplan
       config:
         enabled: true
         baseUrl: http://192.168.10.146:8001
@@ -21,7 +21,7 @@
         provider: openai
         model: gpt-5.6-terra
         reasoningEffort: high
-        sessionIdPrefix: dhs-aplan-
+        sessionIdPrefix: dsh-aplan-
         reuseSessionPerIssue: true
         mountPlanMcp: true
         disposeAfterRun: false

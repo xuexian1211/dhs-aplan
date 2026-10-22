@@ -1,7 +1,7 @@
 /**
  * Cordis `Config` schema. Every user-facing field is `.volatile()` so that
- * @deepseek-ai/dsh-settings serves it as the `dhs-aplan` settings namespace and the
- * plugin's GUI page (dist/client.js, Plugins → dhs-aplan) can edit it live.
+ * @deepseek-ai/dsh-settings serves it as the `dsh-aplan` settings namespace and the
+ * plugin's GUI page (dist/client.js, Plugins → dsh-aplan) can edit it live.
  *
  * schemastery is carried by DSH Desktop. Resolve via createRequire(process.argv[1])
  * first (Desktop entry), then import.meta.url, then dynamic import; if it cannot
@@ -119,7 +119,7 @@ async function loadSchemastery(): Promise<Z | undefined> {
   } catch (err) {
     tried.push(`import: ${err instanceof Error ? err.message : err}`)
   }
-  console.warn(`[dhs-aplan] schemastery unavailable; GUI settings disabled (tried: ${tried.join(' | ')})`)
+  console.warn(`[dsh-aplan] schemastery unavailable; GUI settings disabled (tried: ${tried.join(' | ')})`)
   return undefined
 }
 
@@ -129,7 +129,7 @@ try {
   schema = z ? build(z) : undefined
 } catch (err) {
   console.warn(
-    `[dhs-aplan] schemastery unavailable; GUI settings disabled (${err instanceof Error ? err.message : err})`,
+    `[dsh-aplan] schemastery unavailable; GUI settings disabled (${err instanceof Error ? err.message : err})`,
   )
   schema = undefined
 }

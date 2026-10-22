@@ -1,6 +1,6 @@
-# dhs-aplan
+# dsh-aplan
 
-DeepSeek Harness × It's a Plan 插件（包名 `dhs-aplan`，0.3.7）。目标是取代 CodexHub 的 itsaplan 通道；Plan 本身不改。
+DeepSeek Harness × It's a Plan 插件（包名 `dsh-aplan`，0.3.7）。目标是取代 CodexHub 的 itsaplan 通道；Plan 本身不改。
 规划与进度见 [docs/roadmap-phase2-3.md](docs/roadmap-phase2-3.md)。
 
 ## 闭环（每个角色一条）
@@ -19,12 +19,12 @@ DeepSeek Harness × It's a Plan 插件（包名 `dhs-aplan`，0.3.7）。目标�
 
 ## GUI 配置
 
-DSH 侧栏 **插件 → dhs-aplan**，组合包详情页里的配置表单。保存写回当前 profile 的 patch，并实时生效（插件每 3 秒对账，变化的角色 runner 会重启；正在跑的 run 会被中断并回 failed）。
+DSH 侧栏 **插件 → dsh-aplan**，组合包详情页里的配置表单。保存写回当前 profile 的 patch，并实时生效（插件每 3 秒对账，变化的角色 runner 会重启；正在跑的 run 会被中断并回 failed）。
 Key 只填**环境变量名**，不存 Key 值。
 
 ## 多角色
 
-`roles` 为空：只跑顶层单角色（向后兼容，会话 id `dhs-aplan-AE-69`）。
+`roles` 为空：只跑顶层单角色（向后兼容，会话 id `dsh-aplan-AE-69`）。
 `roles` 非空：每项一个 runner，空字段继承顶层：
 
 ```yaml
@@ -36,7 +36,7 @@ roles:
   - { key: test,   role: 测试,     claimKeyEnv: APLAN_KEY_TEST,   mcpBearerEnv: APLAN_MCP_TEST, enabled: false }
 ```
 
-多角色会话 id 为 `dhs-aplan-<key>-AE-xx`。同一角色不能同时由 CodexHub 和本插件领取（会抢队列）。
+多角色会话 id 为 `dsh-aplan-<key>-AE-xx`。同一角色不能同时由 CodexHub 和本插件领取（会抢队列）。
 
 ## 配置字段
 
@@ -56,7 +56,7 @@ roles:
 | `postClaimComment` / `mcpCommentTool` | true / `add_comment` | 领取评论 |
 | `mountPlanMcp` | true | 给 Agent 挂 Plan MCP 工具 |
 | `setSessionTitle` / `renameExistingSession` | true / true | 会话标题规范 |
-| `sessionIdPrefix` / `reuseSessionPerIssue` / `disposeAfterRun` | `dhs-aplan-` / true / false | 会话策略 |
+| `sessionIdPrefix` / `reuseSessionPerIssue` / `disposeAfterRun` | `dsh-aplan-` / true / false | 会话策略 |
 | `roles` | `[]` | 多角色 |
 
 ## 构建 / 安装
@@ -70,12 +70,12 @@ dsh plugin --profile web add E:\WorkSpaces\dsh-aplan
 ```
 
 Desktop generation 已装时，只把 `dist/`、`package.json`、`cordis.patch.yml` 同步到
-`%APPDATA%\dsh-desktop\harness\profiles\.generations\live\dhs-aplan+<ver>\node_modules\dhs-aplan`，**不要**拷 node_modules（会卡住 DSH），然后重启 DSH。
+`%APPDATA%\dsh-desktop\harness\profiles\.generations\live\dsh-aplan+<ver>\node_modules\dsh-aplan`，**不要**拷 node_modules（会卡住 DSH），然后重启 DSH。
 
 ## 重启后验证
 
-1. `harness.log` 出现 `[dhs-aplan] 0.3 loaded roles=开发:harness ... gui=on`
-2. 插件 → dhs-aplan 出现配置表单
+1. `harness.log` 出现 `[dsh-aplan] 0.3 loaded roles=开发:harness ... gui=on`
+2. 插件 → dsh-aplan 出现配置表单
 3. @ 开发机器人：日志 `session title set ... title=AE-xx · 开发 · …`，工作台会话名同此
 4. `gui=off`：schemastery 没从宿主解析到，插件照常运行，只是没有表单
 

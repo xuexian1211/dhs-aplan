@@ -8,7 +8,7 @@ import { mountPlanMcpTools } from './plan-mcp-tools.js';
 /** Side-effect imports so Context gains `agents` typings. */
 import '@deepseek-ai/dsh-agent';
 /**
- * Re-register persisted dhs-aplan sessions on the host (root) fiber so they
+ * Re-register persisted dsh-aplan sessions on the host (root) fiber so they
  * reappear in the workbench after a plugin config reload. Session files are
  * never deleted; Cordis dispose of the plugin fiber only unregisters live
  * agents that were created on that fiber.
@@ -16,14 +16,14 @@ import '@deepseek-ai/dsh-agent';
 export async function rehydrateAplanSessions(ctx, configs, log) {
     const host = hostCtx(ctx);
     if (typeof host.agents?.resume !== 'function') {
-        log('[dhs-aplan] rehydrate skipped: agents.resume unavailable');
+        log('[dsh-aplan] rehydrate skipped: agents.resume unavailable');
         return;
     }
     const byPrefix = [...configs]
         .filter((c) => c.reuseSessionPerIssue)
         .sort((a, b) => b.sessionIdPrefix.length - a.sessionIdPrefix.length);
     if (!byPrefix.length) {
-        log('[dhs-aplan] rehydrate skipped: no reuseSessionPerIssue roles');
+        log('[dsh-aplan] rehydrate skipped: no reuseSessionPerIssue roles');
         return;
     }
     const seen = new Set();
@@ -60,7 +60,7 @@ export async function rehydrateAplanSessions(ctx, configs, log) {
                     },
                 });
                 const live = host.agents.get(sessionId);
-                const tag = `[dhs-aplan:${role.roleKey || '_'}]`;
+                const tag = `[dsh-aplan:${role.roleKey || '_'}]`;
                 if (live) {
                     await ensureAgentPreset(host, live, log, tag);
                 }
@@ -73,11 +73,11 @@ export async function rehydrateAplanSessions(ctx, configs, log) {
             }
             catch (err) {
                 failed += 1;
-                log(`[dhs-aplan:${role.roleKey || '_'}] rehydrate failed session=${rawId}: ${err instanceof Error ? err.message : String(err)}`);
+                log(`[dsh-aplan:${role.roleKey || '_'}] rehydrate failed session=${rawId}: ${err instanceof Error ? err.message : String(err)}`);
             }
         }
     }
-    log(`[dhs-aplan] rehydrate done resumed=${resumed} alreadyLive=${skippedLive} failed=${failed} scanned=${seen.size} skippedNoCwd=${skippedNoCwd}`);
+    log(`[dsh-aplan] rehydrate done resumed=${resumed} alreadyLive=${skippedLive} failed=${failed} scanned=${seen.size} skippedNoCwd=${skippedNoCwd}`);
 }
 function matchRole(roles, sessionId) {
     for (const r of roles) {
@@ -111,14 +111,14 @@ async function collectSessionIds(ctx, cwd, prefix, log) {
             }
         }
         catch (err) {
-            log(`[dhs-aplan] rehydrate workspace list failed cwd=${cwd}: ${err instanceof Error ? err.message : String(err)}`);
+            log(`[dsh-aplan] rehydrate workspace list failed cwd=${cwd}: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
     const disk = listDiskSessionIds(ctx, cwd, prefix);
     for (const id of disk)
         out.add(id);
     if (!out.size) {
-        log(`[dhs-aplan] rehydrate scan empty cwd=${cwd} prefix=${prefix} diskHits=${disk.length} slug=${cwdToSlug(cwd)}`);
+        log(`[dsh-aplan] rehydrate scan empty cwd=${cwd} prefix=${prefix} diskHits=${disk.length} slug=${cwdToSlug(cwd)}`);
     }
     return [...out];
 }

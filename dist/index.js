@@ -5,7 +5,7 @@ import { RoleRunner } from './runner.js';
 import { ConfigSchema } from './schema.js';
 import { patchStatus, publishRuntimeStatus, removeStatus } from './status.js';
 import { rehydrateAplanSessions } from './rehydrate.js';
-export const name = 'dhs-aplan';
+export const name = 'dsh-aplan';
 /** Cordis: agents required; workspaceRegistry used to attach sessions into the UI workspace tree. */
 export const inject = ['agents', 'workspaceRegistry'];
 /** Schema-backed volatile config → served to the GUI page by dsh-settings. */
@@ -34,7 +34,7 @@ export function apply(ctx, rawConfig = {}) {
                     const mcp = await resolveSecretValue(credentials, cfg.mcpBearerEnv, aplanMcpRef(cfg.roleKey || 'DEV'), legacyItsaplanMcpRef(cfg.roleKey || 'DEV'));
                     mcpValue = mcp.value;
                     if (!mcpValue) {
-                        log(`[dhs-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] WARN: mcpBearerEnv=${cfg.mcpBearerEnv} resolved empty; Plan MCP will fall back to claim key`);
+                        log(`[dsh-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] WARN: mcpBearerEnv=${cfg.mcpBearerEnv} resolved empty; Plan MCP will fall back to claim key`);
                     }
                 }
                 out.push({
@@ -49,7 +49,7 @@ export function apply(ctx, rawConfig = {}) {
             return out;
         }
         catch (err) {
-            log(`[dhs-aplan] config error: ${err instanceof Error ? err.message : String(err)}`);
+            log(`[dsh-aplan] config error: ${err instanceof Error ? err.message : String(err)}`);
             return [];
         }
     };
@@ -88,7 +88,7 @@ export function apply(ctx, rawConfig = {}) {
             if (runners.has(key) || disposed)
                 continue;
             if (!cfg.claimKey) {
-                log(`[dhs-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] missing claim key (ref ${cfg.claimKeyEnv || aplanKeyRef(cfg.roleKey || 'DEV')}); idle`);
+                log(`[dsh-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] missing claim key (ref ${cfg.claimKeyEnv || aplanKeyRef(cfg.roleKey || 'DEV')}); idle`);
                 patchStatus(cfg.roleKey, { role: cfg.role, state: 'no-key' });
                 continue;
             }
@@ -119,7 +119,7 @@ export function apply(ctx, rawConfig = {}) {
                 await rehydrateAplanSessions(ctx, configs, log);
             }
             catch (err) {
-                log(`[dhs-aplan] rehydrate boot failed: ${err instanceof Error ? err.message : String(err)}`);
+                log(`[dsh-aplan] rehydrate boot failed: ${err instanceof Error ? err.message : String(err)}`);
             }
         };
         const first = setTimeout(() => void boot(), 0);
@@ -132,10 +132,10 @@ export function apply(ctx, rawConfig = {}) {
             for (const { runner } of runners.values())
                 void runner.stop('plugin disposed');
             runners.clear();
-            console.log('[dhs-aplan] DISPOSED — claim loops stop requested');
+            console.log('[dsh-aplan] DISPOSED — claim loops stop requested');
         };
     });
-    console.log(`[dhs-aplan] 0.3.17 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
+    console.log(`[dsh-aplan] 0.3.18 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
 }
 function snapshot(raw) {
     const out = {};

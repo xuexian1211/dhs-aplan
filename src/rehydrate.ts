@@ -27,7 +27,7 @@ type HomePaths = {
 }
 
 /**
- * Re-register persisted dhs-aplan sessions on the host (root) fiber so they
+ * Re-register persisted dsh-aplan sessions on the host (root) fiber so they
  * reappear in the workbench after a plugin config reload. Session files are
  * never deleted; Cordis dispose of the plugin fiber only unregisters live
  * agents that were created on that fiber.
@@ -39,7 +39,7 @@ export async function rehydrateAplanSessions(
 ): Promise<void> {
   const host = hostCtx(ctx)
   if (typeof host.agents?.resume !== 'function') {
-    log('[dhs-aplan] rehydrate skipped: agents.resume unavailable')
+    log('[dsh-aplan] rehydrate skipped: agents.resume unavailable')
     return
   }
 
@@ -48,7 +48,7 @@ export async function rehydrateAplanSessions(
     .sort((a, b) => b.sessionIdPrefix.length - a.sessionIdPrefix.length)
 
   if (!byPrefix.length) {
-    log('[dhs-aplan] rehydrate skipped: no reuseSessionPerIssue roles')
+    log('[dsh-aplan] rehydrate skipped: no reuseSessionPerIssue roles')
     return
   }
 
@@ -85,7 +85,7 @@ export async function rehydrateAplanSessions(
           },
         })
         const live = host.agents.get(sessionId)
-        const tag = `[dhs-aplan:${role.roleKey || '_'}]`
+        const tag = `[dsh-aplan:${role.roleKey || '_'}]`
         if (live) {
           await ensureAgentPreset(host, live, log, tag)
         }
@@ -98,7 +98,7 @@ export async function rehydrateAplanSessions(
       } catch (err) {
         failed += 1
         log(
-          `[dhs-aplan:${role.roleKey || '_'}] rehydrate failed session=${rawId}: ${
+          `[dsh-aplan:${role.roleKey || '_'}] rehydrate failed session=${rawId}: ${
             err instanceof Error ? err.message : String(err)
           }`,
         )
@@ -107,7 +107,7 @@ export async function rehydrateAplanSessions(
   }
 
   log(
-    `[dhs-aplan] rehydrate done resumed=${resumed} alreadyLive=${skippedLive} failed=${failed} scanned=${seen.size} skippedNoCwd=${skippedNoCwd}`,
+    `[dsh-aplan] rehydrate done resumed=${resumed} alreadyLive=${skippedLive} failed=${failed} scanned=${seen.size} skippedNoCwd=${skippedNoCwd}`,
   )
 }
 
@@ -149,7 +149,7 @@ async function collectSessionIds(
       }
     } catch (err) {
       log(
-        `[dhs-aplan] rehydrate workspace list failed cwd=${cwd}: ${
+        `[dsh-aplan] rehydrate workspace list failed cwd=${cwd}: ${
           err instanceof Error ? err.message : String(err)
         }`,
       )
@@ -160,7 +160,7 @@ async function collectSessionIds(
   for (const id of disk) out.add(id)
   if (!out.size) {
     log(
-      `[dhs-aplan] rehydrate scan empty cwd=${cwd} prefix=${prefix} diskHits=${disk.length} slug=${cwdToSlug(cwd)}`,
+      `[dsh-aplan] rehydrate scan empty cwd=${cwd} prefix=${prefix} diskHits=${disk.length} slug=${cwdToSlug(cwd)}`,
     )
   }
   return [...out]

@@ -7,12 +7,12 @@ export function startArchiveSweeper(configs, log) {
         timer = undefined;
         const sample = configs()[0];
         if (!sample?.archiveDoneThreads) {
-            log('[dhs-aplan] archive sweeper idle (archiveDoneThreads=false)');
+            log('[dsh-aplan] archive sweeper idle (archiveDoneThreads=false)');
             return;
         }
         const minutes = Math.max(5, Number(sample.archiveSweepMinutes) || 240);
         const ms = minutes * 60_000;
-        log(`[dhs-aplan] archive sweeper armed every ${minutes}m dryRun=${sample.archiveDryRun} (DSH has no Plan-issue archive API yet; sweeps log only)`);
+        log(`[dsh-aplan] archive sweeper armed every ${minutes}m dryRun=${sample.archiveDryRun} (DSH has no Plan-issue archive API yet; sweeps log only)`);
         timer = setInterval(() => {
             if (disposed)
                 return;
@@ -20,7 +20,7 @@ export function startArchiveSweeper(configs, log) {
                 if (!cfg.archiveDoneThreads)
                     continue;
                 const grace = Math.max(5, Number(cfg.archiveGraceMinutes) || 30);
-                log(`[dhs-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] archive sweep skipped: DSH cannot archive by Plan column yet (would wait ${grace}m after completed/canceled; dryRun=${cfg.archiveDryRun})`);
+                log(`[dsh-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] archive sweep skipped: DSH cannot archive by Plan column yet (would wait ${grace}m after completed/canceled; dryRun=${cfg.archiveDryRun})`);
             }
         }, ms);
     };
