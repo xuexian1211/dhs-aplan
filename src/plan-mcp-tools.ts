@@ -6,6 +6,9 @@ export type LogFn = (msg: string) => void
 
 const MOUNTED = Symbol.for('dhs-aplan.planMcpMounted')
 
+/** Tools Plan prompts name by default; missing any is a hard mount failure. */
+const REQUIRED_PLAN_TOOLS = ['get_project', 'add_comment', 'update_issue', 'get_issue'] as const
+
 type ToolsHost = {
   register: (definition: unknown) => () => void
 }
@@ -31,32 +34,45 @@ export async function mountPlanMcpTools(
   config: Config,
   log: LogFn,
 ): Promise<void> {
+  const tag = config.roleKey ? `[dhs-aplan:${config.roleKey}]` : '[dhs-aplan]'
+
+  // Force-mount even if a stale per-role flag says false (AE-133 req).
   if (config.mountPlanMcp === false) {
-    log('[dhs-aplan] mountPlanMcp=false; skipping Plan MCP tools')
-    return
+    log(`${tag} CRITICAL: mountPlanMcp=false ignored; forcing Plan MCP tools (silent skip caused AE-133 tool gap)`)
   }
-  log(`[dhs-aplan] mounting Plan MCP tools baseUrl=${config.baseUrl} mcpPath=${config.mcpPath}`)
+  log(`${tag} mounting Plan MCP tools baseUrl=${config.baseUrl} mcpPath=${config.mcpPath}`)
 
   const marked = agentCtx as Context & { [MOUNTED]?: boolean }
   if (marked[MOUNTED]) {
-    log('[dhs-aplan] Plan MCP tools already mounted on this agent scope')
+    log(`${tag} Plan MCP tools already mounted on this agent scope`)
     return
   }
 
   const tools = (agentCtx as Context & { tools?: ToolsHost }).tools
   if (!tools || typeof tools.register !== 'function') {
     throw new Error(
-      'dhs-aplan mountPlanMcp requires ctx.tools on the agent scope (dsh-tools / agent-loop)',
+      `${tag} mountPlanMcp HARD FAIL: ctx.tools missing on agent scope (dsh-tools / agent-loop)`,
     )
   }
 
+  const usedMcpBearer = Boolean(config.mcpBearer && String(config.mcpBearer).trim())
   const bearer =
     (config.mcpBearer && String(config.mcpBearer).trim()) ||
     (config.claimKey && String(config.claimKey).trim()) ||
     ''
   if (!bearer) {
-    throw new Error('dhs-aplan mountPlanMcp: missing claim/MCP bearer key')
+    throw new Error(
+      `${tag} mountPlanMcp HARD FAIL: missing claim/MCP bearer (claimKeyEnv=${config.claimKeyEnv || '?'} mcpBearerEnv=${config.mcpBearerEnv || '(reuse claim)'})`,
+    )
   }
+  if (config.mcpBearerEnv.trim() && !usedMcpBearer) {
+    log(
+      `${tag} WARN: mcpBearerEnv=${config.mcpBearerEnv} resolved empty; falling back to claim key for Plan MCP`,
+    )
+  }
+  log(
+    `${tag} Plan MCP bearer source=${usedMcpBearer ? 'mcpBearerEnv:' + config.mcpBearerEnv : 'claimKeyEnv:' + config.claimKeyEnv}`,
+  )
 
   const mcpUrl = `${config.baseUrl.replace(/\/+$/, '')}${
     config.mcpPath.startsWith('/') ? '' : '/'
@@ -65,7 +81,7 @@ export async function mountPlanMcpTools(
   const createDef = await loadCreateMcpToolDefinition()
   if (!createDef) {
     throw new Error(
-      'dhs-aplan mountPlanMcp: @deepseek-ai/dsh-mcp-client is not resolvable in this Desktop runtime',
+      `${tag} mountPlanMcp HARD FAIL: @deepseek-ai/dsh-mcp-client is not resolvable in this Desktop runtime`,
     )
   }
 
@@ -73,11 +89,12 @@ export async function mountPlanMcpTools(
   await mcp.initialize()
   const listed = await mcp.listTools()
   if (listed.length === 0) {
-    throw new Error(`dhs-aplan mountPlanMcp: tools/list returned empty from ${mcpUrl}`)
+    throw new Error(`${tag} mountPlanMcp HARD FAIL: tools/list returned empty from ${mcpUrl}`)
   }
 
   let registered = 0
   const failures: string[] = []
+  const registeredNames = new Set<string>()
   for (const tool of listed) {
     const name = tool.name?.trim()
     if (!name) continue
@@ -92,6 +109,7 @@ export async function mountPlanMcpTools(
       })
       tools.register(definition)
       registered += 1
+      registeredNames.add(name)
     } catch (err) {
       failures.push(`${name}: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -99,20 +117,28 @@ export async function mountPlanMcpTools(
 
   if (registered === 0) {
     throw new Error(
-      `dhs-aplan mountPlanMcp: registered 0/${listed.length} tools` +
+      `${tag} mountPlanMcp HARD FAIL: registered 0/${listed.length} tools` +
         (failures[0] ? `; first error: ${failures[0]}` : ''),
     )
   }
 
+  const missingRequired = REQUIRED_PLAN_TOOLS.filter((n) => !registeredNames.has(n))
+  if (missingRequired.length) {
+    throw new Error(
+      `${tag} mountPlanMcp HARD FAIL: required tools missing after register: ${missingRequired.join(', ')} (registered=${registered}/${listed.length})`,
+    )
+  }
+
+
   marked[MOUNTED] = true
   log(
-    `[dhs-aplan] Plan MCP mounted url=${mcpUrl} tools=${registered}/${listed.length}` +
+    `${tag} Plan MCP mounted url=${mcpUrl} tools=${registered}/${listed.length} native=${REQUIRED_PLAN_TOOLS.join(',')}` +
       (failures.length ? ` skipped=${failures.length}` : ''),
   )
   if (failures.length && failures.length <= 8) {
-    for (const f of failures) log(`[dhs-aplan] Plan MCP skip: ${f}`)
+    for (const f of failures) log(`${tag} Plan MCP skip: ${f}`)
   } else if (failures.length) {
-    log(`[dhs-aplan] Plan MCP skip examples: ${failures.slice(0, 3).join(' | ')}`)
+    log(`${tag} Plan MCP skip examples: ${failures.slice(0, 3).join(' | ')}`)
   }
 
   // Help the model when Plan prompts say "add_comment" and tools are present under that exact name.
@@ -121,7 +147,7 @@ export async function mountPlanMcpTools(
       name: 'dhs-aplan:plan-mcp-tools',
       order: 1400,
       text: [
-        'Its a Plan MCP tools are available under their native names (for example add_comment, get_issue, update_issue, get_issue_by_number).',
+        'Its a Plan MCP tools are available under their native names (for example add_comment, get_project, update_issue, get_issue, get_issue_by_number).',
         'When a task names one of those tools, call it directly with the given arguments. Do not claim the tool is missing if it appears in your tool list.',
       ].join(' '),
       interpolate: false,

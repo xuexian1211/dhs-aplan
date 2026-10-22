@@ -59,6 +59,11 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
             legacyItsaplanMcpRef(cfg.roleKey || 'DEV'),
           )
           mcpValue = mcp.value
+          if (!mcpValue) {
+            log(
+              `[dhs-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] WARN: mcpBearerEnv=${cfg.mcpBearerEnv} resolved empty; Plan MCP will fall back to claim key`,
+            )
+          }
         }
         out.push({
           ...cfg,
@@ -144,7 +149,7 @@ export function apply(ctx: Context, rawConfig: RawConfig = {}) {
   })
 
   console.log(
-    `[dhs-aplan] 0.3.8 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
+    `[dhs-aplan] 0.3.10 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`,
   )
 }
 

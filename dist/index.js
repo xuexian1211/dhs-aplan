@@ -32,6 +32,9 @@ export function apply(ctx, rawConfig = {}) {
                 if (cfg.mcpBearerEnv.trim()) {
                     const mcp = await resolveSecretValue(credentials, cfg.mcpBearerEnv, aplanMcpRef(cfg.roleKey || 'DEV'), legacyItsaplanMcpRef(cfg.roleKey || 'DEV'));
                     mcpValue = mcp.value;
+                    if (!mcpValue) {
+                        log(`[dhs-aplan${cfg.roleKey ? ':' + cfg.roleKey : ''}] WARN: mcpBearerEnv=${cfg.mcpBearerEnv} resolved empty; Plan MCP will fall back to claim key`);
+                    }
                 }
                 out.push({
                     ...cfg,
@@ -117,7 +120,7 @@ export function apply(ctx, rawConfig = {}) {
             console.log('[dhs-aplan] DISPOSED — claim loops stop requested');
         };
     });
-    console.log(`[dhs-aplan] 0.3.8 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
+    console.log(`[dhs-aplan] 0.3.10 loaded baseUrl=${defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'} credentials=${credentials ? 'on' : 'env-only'}`);
 }
 function snapshot(raw) {
     const out = {};

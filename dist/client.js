@@ -298,7 +298,7 @@ window.__ModuleLoader__.load({
 				setSessionTitle: r.setSessionTitle === false ? false : (r.setSessionTitle === true ? true : undefined),
 				renameExistingSession: r.renameExistingSession === false ? false : (r.renameExistingSession === true ? true : undefined),
 				disposeAfterRun: r.disposeAfterRun === false ? false : (r.disposeAfterRun === true ? true : undefined),
-				mountPlanMcp: r.mountPlanMcp === false ? false : true,
+				mountPlanMcp: true,
 			};
 		}
 
@@ -314,7 +314,7 @@ window.__ModuleLoader__.load({
 					cwd: String(r.cwd || "").trim(),
 					mode: r.mode === "dry-run" ? "dry-run" : "harness",
 					postClaimComment: r.postClaimComment !== false,
-					mountPlanMcp: r.mountPlanMcp !== false,
+					mountPlanMcp: true,
 				};
 				const mcpPath = String(r.mcpPath || "").trim();
 				const mcpCommentTool = String(r.mcpCommentTool || "").trim();
@@ -874,7 +874,7 @@ function RoleField(props) {
 													jsx(EffortSelect, { label: t("reasoningEffort"), value: role.reasoningEffort, hint: t("reasoningEffortHint"), disabled, onChange: (v) => patch(index, { reasoningEffort: v }) }),
 												],
 											}),
-											jsx(RoleBool, { label: t("mountPlanMcp"), value: role.mountPlanMcp !== false, disabled, onChange: (c) => patch(index, { mountPlanMcp: c }) }),
+											jsx(RoleBool, { label: t("mountPlanMcp"), value: role.mountPlanMcp !== false, disabled, onChange: (_c) => patch(index, { mountPlanMcp: true }) }),
 											jsx("div", { style: SECTION, children: t("sectionSession") }),
 											jsxs("div", {
 												style: GRID,

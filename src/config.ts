@@ -149,7 +149,7 @@ function pick<T>(value: T | undefined | null, fallback: T): T {
   return value
 }
 
-/** Like pick, but empty string is kept (optional cwd / optional overrides that mean "unset"). */
+/** Like pick, but empty string is kept (provider/model/effort). Role cwd uses pick() so empty inherits top. */
 function pickKeepEmpty(value: string | undefined | null, fallback: string): string {
   if (value === undefined || value === null) return fallback
   return String(value)
@@ -169,6 +169,8 @@ function base(raw: RawConfig): Config {
     if (v === undefined || v === null) continue
     ;(out as Record<string, unknown>)[key] = v
   }
+  // Plan MCP tools required for every role session (harness or dry-run).
+  out.mountPlanMcp = true
   return out
 }
 
@@ -201,7 +203,7 @@ export function resolveRoles(raw: RawConfig): Config[] {
       mcpPath: pick(r.mcpPath, top.mcpPath),
       mcpCommentTool: pick(r.mcpCommentTool, top.mcpCommentTool),
       postClaimComment: pickBool(r.postClaimComment, top.postClaimComment),
-      cwd: pickKeepEmpty(r.cwd, top.cwd),
+      cwd: pick(r.cwd, top.cwd), // empty role cwd inherits top (do not clear profile cwd)
       provider: pickKeepEmpty(r.provider, top.provider),
       model: pickKeepEmpty(r.model, top.model),
       reasoningEffort: pickKeepEmpty(r.reasoningEffort, top.reasoningEffort),
@@ -209,7 +211,7 @@ export function resolveRoles(raw: RawConfig): Config[] {
       sessionIdPrefix: pick(r.sessionIdPrefix, `${top.sessionIdPrefix}${key}-`),
       reuseSessionPerIssue: pickBool(r.reuseSessionPerIssue, top.reuseSessionPerIssue),
       disposeAfterRun: pickBool(r.disposeAfterRun, top.disposeAfterRun),
-      mountPlanMcp: pickBool(r.mountPlanMcp, top.mountPlanMcp),
+      mountPlanMcp: true, // always on; per-role false broke AE-133 req
       setSessionTitle: pickBool(r.setSessionTitle, top.setSessionTitle),
       renameExistingSession: pickBool(r.renameExistingSession, top.renameExistingSession),
     })
