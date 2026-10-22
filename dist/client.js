@@ -158,81 +158,9 @@ window.__ModuleLoader__.load({
 			lastHeartbeat: "上次心跳",
 			lastError: "上次错误",
 		};
-		const en = Object.assign({}, zh, {
-			description: "It's a Plan external agent: claim → Harness session → report.",
-			modeHint: "harness = real Agent turn + session; dry-run = claim/comment then success without a Harness turn (integration tests).",
-			modeHarness: "Run (harness)",
-			modeDryRun: "Dry-run",
-			cwd: "Working directory (absolute, optional)", cwdHint: "Empty = no cwd / session stays ungrouped. Must be absolute when set.",
-			permissionPreset: "Workspace permission",
-			permissionPresetHint: "Maps to DSH session permission: View Only=read-only; Modify within Workspace=workspace-write; Full Permissions=danger-full-access. Defaults: dev/test → full; others → workspace-write. Applied on create/reuse.",
-			permissionPresetViewOnly: "View Only",
-			permissionPresetStandard: "Modify within Workspace",
-			permissionPresetFull: "Full Permissions",
-			sectionPermission: "Workspace permissions",
-			groupConfigIo: "Config import/export",
-			configExport: "Export config",
-			configImport: "Import config",
-			configImportMerge: "Merge by role key",
-			configImportReplace: "Replace all roles",
-			configIoHint: "Export/import volatile plugin config (roles, cwd, model, prefixes, permission, MCP *Env ref names). No raw secrets — credential refs only. JSON (+ YAML export).",
-			configIoOk: "Import applied",
-			configIoFail: "Import failed: invalid format or fields",
-			roles: "Roles",
-			rolesHint: "One card per role (identity / connection / run / session). Empty list shows one editable default card that writes roles[0].",
-			rolesAdd: "Add role",
-			rolesRemove: "Delete",
-			rolesTemplate: "Fill five-role template",
-			rolesEmptyHint: "No roles saved yet; editing the default card writes roles[0].",
-			roleKey: "key (slug)",
-			roleDisplay: "Display name",
-			roleEnabled: "Enabled",
-			sectionIdentity: "Identity",
-			sectionConn: "Connection & keys",
-			sectionRun: "Run",
-			sectionSession: "Session (this role)",
-			sectionAdvanced: "Advanced",
-			cwdBrowse: "Browse…",
-			cwdComboHint: "Dropdown lists known workspaces; type freely or Browse. Changes apply to new sessions only.",
-			cwdBrowseUnavailable: "No native folder picker here — type an absolute path.",
-			siteDefaults: "Site defaults",
-			save: "Save", saving: "Saving…", reset: "Reset", overridden: "Overridden",
-			groupGlobal: "Global", groupArchive: "Auto-archive", groupRuntimeAcl: "Workspace ACL", groupSiteSession: "Site defaults · Session", groupRoles: "Roles",
-			claimKey: "Claim key", claimKeyHint: "Paste the API key (password field). Saved into the DSH credentials store, never into the patch. Leave blank to keep.",
-			mcpBearer: "MCP writeback key (optional, empty=same as claim)", mcpBearerHint: "Empty = reuse claim key.",
-			claimKeyEnv: "Claim key env/ref (advanced)", claimKeyEnvHint: "Usually leave as APLAN_KEY_<role>.",
-			mcpBearerEnv: "MCP writeback env/ref (advanced)", mcpBearerEnvHint: "Empty = reuse claim credential.",
-			claimKeyConfigured: "Configured (leave blank to keep)",
-			claimKeyMissing: "Not configured",
-			statusConnected: "Connected",
-			statusDisconnected: "Not connected",
-			statusPaused: "Paused",
-			statusError: "Error",
-			statusNoKey: "Not connected",
-			statusIdle: "Connected",
-			statusClaiming: "Claiming",
-			statusRunning: "Running",
-			statusTitle: "Connection status",
-			statusHint: "Pause = turn off role Enabled. Keys live in the DSH credentials store, not cordis.patch.",
-			pauseRole: "Enabled (off = pause claiming)",
-			reasoningEffort: "Reasoning level",
-			reasoningEffortHint: "Passed as AgentOptions.reasoningEffort; default high (empty = model default).",
-			reasoningOff: "off",
-			reasoningMinimal: "minimal",
-			reasoningLow: "low",
-			reasoningMedium: "medium",
-			reasoningHigh: "high",
-			reasoningXhigh: "xhigh",
-			archiveDoneThreads: "Auto-archive (completed/canceled issue sessions)",
-			archiveDoneThreadsHint: "CodexHub parity. DSH has no Plan-column archive API yet; enabling only logs (prefer dry-run first).",
-			archiveDryRun: "Archive dry-run (log only)",
-			archiveSweepMinutes: "Archive sweep interval (minutes)",
-			archiveGraceMinutes: "Grace after complete (minutes)",
-			sectionArchive: "Auto-archive (experimental)",
-			lastClaim: "Last claim",
-			lastHeartbeat: "Last heartbeat",
-			lastError: "Last error",
-		});
+		// Chinese-first plugin UI: ship the same dictionary for en so DSH app-locale=en
+		// cannot replace labels with English overrides (regression seen in 0.3.22).
+		const en = Object.assign({}, zh);
 
 		const text = (f) => P.settingsTextField(f);
 		const num = (f) => P.settingsNumberField(f);
@@ -313,18 +241,26 @@ window.__ModuleLoader__.load({
 			flexShrink: 0,
 		};
 
-		/** DSH locale.bind returns the key when missing (truthy), so t(k)||fallback never works. */
-		function tr(t, key, fallback) {
-			try {
-				const v = typeof t === "function" ? t(key) : null;
-				if (typeof v === "string" && v.length && v !== key) return v;
-			} catch (_) {}
-			if (typeof fallback === "string" && fallback.length) return fallback;
-			if (zh && typeof zh[key] === "string") return zh[key];
-			return key;
-		}
-
-
+		/** Chinese-first label helper.
+		 *  DSH locale.bind may resolve the English dictionary when app locale is en,
+		 *  and returns the key itself when missing (truthy) — both caused English/key leaks.
+		 *  Prefer explicit fallback, then zh[key], then t(key). */
+				function tr(t, key, fallback) {
+					if (typeof fallback === "string" && fallback.length) return fallback;
+					if (zh && typeof zh[key] === "string") return zh[key];
+					try {
+						const v = typeof t === "function" ? t(key) : null;
+						if (typeof v === "string" && v.length && v !== key) return v;
+					} catch (_) {}
+					return key;
+				}
+		
+				/** Bind a Chinese-first t() for the whole settings card (roles + top fields). */
+				function bindZhT(tRaw) {
+					return function tZh(key) {
+						return tr(tRaw, key);
+					};
+				}
 		function parseRoles(textValue) {
 			const s = String(textValue || "").trim();
 			if (!s || s === "[]") return [];
@@ -1175,7 +1111,7 @@ function RoleField(props) {
 		}
 
 		function AplanCard(props) {
-			const { t } = props;
+			const t = bindZhT(props.t);
 			const state = props.useAplanCard((s) => s);
 			if (props.view === "summary") return t("description");
 			const disabled = !state.writable || state.saving;
