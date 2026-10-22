@@ -62,7 +62,7 @@ export function apply(ctx, rawConfig = {}) {
         };
     });
     const roles = read();
-    console.log(`[dhs-aplan] 0.3 loaded roles=${roles.map((r) => `${r.role}:${r.mode}`).join(',') || '(none)'} baseUrl=${roles[0]?.baseUrl ?? defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'}`);
+    console.log(`[dhs-aplan] 0.3.1 loaded roles=${roles.map((r) => `${r.role}:${r.mode}`).join(',') || '(none)'} baseUrl=${roles[0]?.baseUrl ?? defaultConfig.baseUrl} gui=${ConfigSchema ? 'on' : 'off'}`);
 }
 /**
  * Plain copy of the config. `.volatile()` schema fields arrive as live references

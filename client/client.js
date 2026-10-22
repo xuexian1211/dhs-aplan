@@ -1,5 +1,7 @@
 // dhs-aplan browser half: settings page on Plugins → dhs-aplan (plugins.bundle.config slot).
 // Hand-written in the DSH client-module factory format (no bundler needed).
+// Slot must use options.key = package name ("dhs-aplan"); plugin-manager matches
+// plugins.bundle.config via entryKey: pkg.name (keyed slot), not id.
 window.__ModuleLoader__.load({
 	id: "dhs-aplan",
 	factory: (require) => {
@@ -11,13 +13,14 @@ window.__ModuleLoader__.load({
 
 		const NS = "settings.dhsAplan";
 		const CONFIG_NS = "dhs-aplan";
+		const PACKAGE_KEY = "dhs-aplan";
 
 		const zh = {
 			title: "dhs-aplan（It's a Plan）",
 			description: "It's a Plan 外部 Agent 领取 → Harness 会话 → 回写结果。",
 			enabled: "启用", enabledHint: "关闭后插件不再领取任何角色的 run。",
 			baseUrl: "Plan 地址", baseUrlHint: "例如 http://192.168.10.146:8001",
-			mode: "模式", modeHint: "harness = 真实 Agent 回合；dry-run = 只领取+评论+直接回 success（联调用）。",
+			mode: "模式", modeHint: "harness = 真实 Agent 回合；dry-run = 只领取/评论+直接回 success（联调用）。",
 			role: "角色名（会话标题显示）", roleHint: "单角色时使用，例如 开发。会话标题：<ISSUE> · <角色> · <标题>。",
 			claimKeyEnv: "领取 Key 环境变量名", claimKeyEnvHint: "填环境变量名（不是 Key 本身），例如 ITSAPLAN_KEY_DEV。",
 			mcpBearerEnv: "MCP 写回 Key 环境变量名", mcpBearerEnvHint: "留空 = 复用领取 Key。",
@@ -27,16 +30,16 @@ window.__ModuleLoader__.load({
 			cwd: "工作目录（绝对路径）", cwdHint: "Harness 会话 cwd，并挂到同名工作区。",
 			provider: "Provider", providerHint: "留空 = profile 默认模型。",
 			model: "模型", modelHint: "留空 = profile 默认模型。",
-			pollIntervalMs: "轮询间隔（ms）", heartbeatIntervalMs: "心跳间隔（ms）", heartbeatIntervalMsHint: "须小于 Plan lease（60s）。",
+			pollIntervalMs: "轮询间隔（ms）", heartbeatIntervalMs: "心跳间隔（ms）", heartbeatIntervalMsHint: "须小于 Plan lease（30s）。",
 			turnTimeoutMs: "单回合超时（ms）", turnTimeoutMsHint: "0 = 不限；超时会中断回合并回报 failed。",
 			sessionIdPrefix: "会话 id 前缀",
 			reuseSessionPerIssue: "同一 issue 复用会话",
 			disposeAfterRun: "回合结束后释放会话",
-			mountPlanMcp: "向 Agent 挂载 Plan MCP 工具",
+			mountPlanMcp: "给 Agent 挂载 Plan MCP 工具",
 			setSessionTitle: "按规范设置会话标题",
 			renameExistingSession: "复用会话时也纠正标题",
 			roles: "多角色（JSON 数组）",
-			rolesHint: "留空/[] = 只跑上面的单角色。示例：[{\"key\":\"dev\",\"role\":\"开发\",\"claimKeyEnv\":\"ITSAPLAN_KEY_DEV\"},{\"key\":\"review\",\"role\":\"评审\",\"claimKeyEnv\":\"ITSAPLAN_KEY_REVIEW\",\"mcpBearerEnv\":\"ITSAPLAN_MCP_REVIEW\"}]；每项可选 cwd/provider/model/mode/enabled。",
+			rolesHint: '留空/[] = 只跑上面的单角色。示例：[{"key":"dev","role":"开发","claimKeyEnv":"ITSAPLAN_KEY_DEV"},{"key":"review","role":"评审","claimKeyEnv":"ITSAPLAN_KEY_REVIEW","mcpBearerEnv":"ITSAPLAN_MCP_REVIEW"}]；每项可覆 cwd/provider/model/mode/enabled。',
 			invalid: "格式不对", invalidMode: "只能是 harness 或 dry-run", invalidJson: "需要 JSON 数组",
 			overridden: "已覆盖", reset: "恢复默认",
 			readOnly: "本部署的设置为只读。", unavailable: "dhs-aplan 未加载（或缺少 schema），暂时无法配置。",
@@ -142,16 +145,87 @@ window.__ModuleLoader__.load({
 			dispose() { this.form.dispose(); }
 		}
 
-		const inject = ["slots", "locale", "configForms"];
+		// configForms preferred but soft-failed: keyed slot still registers.
+		const inject = ["slots", "locale"];
 		function apply(ctx) {
 			const t = ctx.locale.bind(NS);
 			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dhs-aplan: dictionaries");
-			const card = new Controller(ctx.configForms.get(CONFIG_NS));
-			ctx.effect(() => () => card.dispose(), "dhs-aplan: form");
-			const entry = (name, id) => ctx.slots.inject(name, () => ctx.slots.register({
-				name, id, order: 50, label: () => t("title"), locale: NS, inject: () => card.inject(),
-			}, AplanCard));
-			ctx.effect(() => ctx.configForms.whileServed([CONFIG_NS], () => entry("plugins.bundle.config", "dhs-aplan")), "dhs-aplan: bundle page");
+
+			let card = null;
+			const attachForm = (forms) => {
+				try {
+					if (!forms || typeof forms.get !== "function") return;
+					if (card) {
+						try { card.dispose(); } catch (_) {}
+						card = null;
+					}
+					card = new Controller(forms.get(CONFIG_NS));
+				} catch (err) {
+					console.warn("[dhs-aplan] configForms soft-fail:", err && err.message ? err.message : err);
+					card = null;
+				}
+			};
+			// Eager soft-read (no inject hard-dep) + delayed inject when service appears.
+			try {
+				const forms = ctx.reflect && typeof ctx.reflect.get === "function"
+					? ctx.reflect.get("configForms", false)
+					: null;
+				attachForm(forms);
+			} catch (err) {
+				console.warn("[dhs-aplan] configForms soft-fail:", err && err.message ? err.message : err);
+			}
+			if (typeof ctx.inject === "function") {
+				ctx.effect(
+					() =>
+						ctx.inject(["configForms"], (c) => {
+							attachForm(c.configForms);
+							return () => {
+								try { card && card.dispose(); } catch (_) {}
+								card = null;
+							};
+						}),
+					"dhs-aplan: form",
+				);
+			} else if (card) {
+				ctx.effect(() => () => { try { card && card.dispose(); } catch (_) {} }, "dhs-aplan: form");
+			}
+
+			const emptyInject = () => ({
+				hooks: {
+					aplanCard: {
+						getSnapshot: () => ({
+							writable: false,
+							saving: false,
+							fields: Object.fromEntries(SPECS.map((s) => [s.field, { text: "", overridden: false, invalid: false }])),
+							status: "unavailable",
+						}),
+						subscribe: () => () => {},
+					},
+				},
+				edit: () => {},
+				resetField: () => {},
+				save: () => {},
+				discard: () => {},
+			});
+
+			// Unconditional keyed registration: key = package name (not id).
+			ctx.effect(
+				() =>
+					ctx.slots.inject("plugins.bundle.config", () =>
+						ctx.slots.register(
+							{
+								name: "plugins.bundle.config",
+								key: PACKAGE_KEY,
+								order: 50,
+								label: () => t("title"),
+								locale: NS,
+								inject: () => (card ? card.inject() : emptyInject()),
+							},
+							AplanCard,
+						),
+					),
+				"dhs-aplan: bundle page",
+			);
 		}
 		exports.NS = NS;
 		exports.apply = apply;

@@ -3,9 +3,11 @@
  * @deepseek-ai/dsh-settings serves it as the `dhs-aplan` settings namespace and the
  * plugin's GUI page (dist/client.js, Plugins → dhs-aplan) can edit it live.
  *
- * schemastery is carried by DSH Desktop (resolved through the host module fallback);
- * if it cannot load, the plugin still runs without a schema (no GUI form).
+ * schemastery is carried by DSH Desktop. Resolve via createRequire(process.argv[1])
+ * first (Desktop entry), then import.meta.url, then dynamic import; if it cannot
+ * load, the plugin still runs without a schema (no GUI form values).
  */
+import { createRequire } from 'node:module';
 import { defaultConfig as d } from './config.js';
 function build(z) {
     const s = (def) => z.string().default(def).volatile();
@@ -48,11 +50,69 @@ function build(z) {
         roles: z.array(role).default([]).volatile(),
     });
 }
+function pickZ(mod) {
+    if (mod && typeof mod === 'object' && 'default' in mod && mod.default) {
+        return mod.default;
+    }
+    return mod;
+}
+async function loadSchemastery() {
+    const tried = [];
+    // 1) createRequire against Desktop process entry (process.argv[1])
+    try {
+        const entry = process.argv[1];
+        if (entry) {
+            tried.push(`createRequire(process.argv[1]=${entry})`);
+            const require = createRequire(entry);
+            const mod = require('@deepseek-ai/schemastery');
+            return pickZ(mod);
+        }
+    }
+    catch (err) {
+        tried.push(`argv1: ${err instanceof Error ? err.message : err}`);
+    }
+    // 2) createRequire against this module (import.meta.url)
+    try {
+        tried.push('createRequire(import.meta.url)');
+        const require = createRequire(import.meta.url);
+        const mod = require('@deepseek-ai/schemastery');
+        return pickZ(mod);
+    }
+    catch (err) {
+        tried.push(`import.meta.url: ${err instanceof Error ? err.message : err}`);
+    }
+    // 3) Also try asar package.json anchors (same pattern as plan-mcp-tools)
+    const asarAnchors = [
+        'C:/Program Files/DSH Desktop/resources/app.asar/package.json',
+        'C:/Program Files/DSH Desktop/resources/app.asar/node_modules/@deepseek-ai/schemastery/package.json',
+    ];
+    for (const anchor of asarAnchors) {
+        try {
+            tried.push(`createRequire(${anchor})`);
+            const require = createRequire(anchor);
+            const mod = require('@deepseek-ai/schemastery');
+            return pickZ(mod);
+        }
+        catch (err) {
+            tried.push(`${anchor}: ${err instanceof Error ? err.message : err}`);
+        }
+    }
+    // 4) dynamic import (host-module-fallback may help)
+    try {
+        tried.push('dynamic import');
+        const mod = (await import('@deepseek-ai/schemastery'));
+        return pickZ(mod);
+    }
+    catch (err) {
+        tried.push(`import: ${err instanceof Error ? err.message : err}`);
+    }
+    console.warn(`[dhs-aplan] schemastery unavailable; GUI settings disabled (tried: ${tried.join(' | ')})`);
+    return undefined;
+}
 let schema;
 try {
-    const mod = (await import('@deepseek-ai/schemastery'));
-    const z = mod.default ?? mod;
-    schema = build(z);
+    const z = await loadSchemastery();
+    schema = z ? build(z) : undefined;
 }
 catch (err) {
     console.warn(`[dhs-aplan] schemastery unavailable; GUI settings disabled (${err instanceof Error ? err.message : err})`);
