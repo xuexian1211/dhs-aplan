@@ -1,65 +1,174 @@
-import { resolveSecret } from './config.js';
+import { runHarnessTurn } from './harness.js';
 import { McpClient } from './mcp-client.js';
 import { PlanClient } from './plan-client.js';
-export class DevRoleRunner {
+import { patchStatus, safeErrorMessage } from './status.js';
+/** One claim loop for one Plan role (one external-agent key). */
+export class RoleRunner {
+    ctx;
     config;
     log;
     stopped = false;
-    busy = false;
-    constructor(config, log = console.log) {
+    abort = new AbortController();
+    inFlight;
+    loopDone;
+    tag;
+    constructor(ctx, config, log = console.log) {
+        this.ctx = ctx;
         this.config = config;
         this.log = log;
+        this.tag = config.roleKey ? `[dhs-aplan:${config.roleKey}]` : '[dhs-aplan]';
     }
-    stop() {
+    get label() {
+        return `${this.config.role}${this.config.roleKey ? `(${this.config.roleKey})` : ''}`;
+    }
+    start() {
+        this.loopDone ??= this.loop().catch((err) => {
+            this.log(`${this.tag} runner crashed: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
+            patchStatus(this.config.roleKey, {
+                role: this.config.role,
+                state: 'error',
+                lastError: safeErrorMessage(err),
+            });
+        });
+        return this.loopDone;
+    }
+    /**
+     * Stop claiming. An in-flight run is interrupted and reported failed right away so the
+     * Plan claim lock is released instead of waiting for the lease to expire.
+     */
+    async stop(reason = 'runner stopped') {
+        if (this.stopped)
+            return;
         this.stopped = true;
+        this.abort.abort();
+        const cur = this.inFlight;
+        if (cur && !cur.reported) {
+            cur.reported = true;
+            try {
+                await cur.plan.reportRun(cur.run.id, { status: 'failed', error: `dhs-aplan ${reason}` });
+                this.log(`${this.tag} reported in-flight run=${cur.run.id} failed (${reason})`);
+            }
+            catch (e) {
+                this.log(`${this.tag} could not report in-flight run=${cur.run.id}: ${e instanceof Error ? e.message : e}`);
+            }
+        }
+    }
+    claimKey() {
+        return (this.config.claimKey || '').trim();
+    }
+    mcpBearer() {
+        const direct = (this.config.mcpBearer || '').trim();
+        if (direct)
+            return direct;
+        return this.claimKey();
     }
     async loop() {
-        const claimKey = resolveSecret(this.config.claimKeyEnv);
+        const claimKey = this.claimKey();
         if (!claimKey) {
-            this.log(`[dhs-aplan] missing claim key env ${this.config.claimKeyEnv}; idle`);
+            this.log(`${this.tag} missing claim key (ref ${this.config.claimKeyEnv}) for role ${this.label}; idle`);
+            patchStatus(this.config.roleKey, { role: this.config.role, state: 'no-key' });
             return;
         }
         const plan = new PlanClient(this.config.baseUrl, claimKey);
-        this.log(`[dhs-aplan] 开发 runner started mode=${this.config.mode} base=${this.config.baseUrl} poll=${this.config.pollIntervalMs}ms`);
+        this.log(`${this.tag} ${this.label} runner started mode=${this.config.mode} base=${this.config.baseUrl} poll=${this.config.pollIntervalMs}ms`);
+        patchStatus(this.config.roleKey, { role: this.config.role, state: 'idle' });
+        let backoff = this.config.pollIntervalMs;
         while (!this.stopped) {
-            if (this.busy) {
-                await sleep(500);
-                continue;
-            }
             try {
+                patchStatus(this.config.roleKey, { role: this.config.role, state: 'claiming' });
                 const run = await plan.claimRun();
+                if (this.stopped) {
+                    if (run) {
+                        await plan.reportRun(run.id, { status: 'failed', error: 'dhs-aplan runner stopping; retry' }).catch(() => { });
+                    }
+                    break;
+                }
                 if (!run) {
-                    await sleep(this.config.pollIntervalMs);
+                    backoff = this.config.pollIntervalMs;
+                    patchStatus(this.config.roleKey, { role: this.config.role, state: 'idle' });
+                    await this.sleep(this.config.pollIntervalMs);
                     continue;
                 }
-                this.busy = true;
+                backoff = this.config.pollIntervalMs;
                 await this.handleRun(plan, run);
             }
             catch (err) {
-                this.log(`[dhs-aplan] claim loop error: ${err instanceof Error ? err.message : String(err)}`);
-                await sleep(this.config.pollIntervalMs);
-            }
-            finally {
-                this.busy = false;
+                this.log(`${this.tag} claim loop error: ${err instanceof Error ? err.message : String(err)}`);
+                patchStatus(this.config.roleKey, {
+                    role: this.config.role,
+                    state: 'error',
+                    lastError: safeErrorMessage(err),
+                });
+                backoff = Math.min(Math.max(backoff * 2, this.config.pollIntervalMs), 60_000);
+                await this.sleep(backoff);
             }
         }
-        this.log('[dhs-aplan] 开发 runner stopped');
+        this.log(`${this.tag} ${this.label} runner stopped`);
+    }
+    sleep(ms) {
+        return new Promise((resolve) => {
+            if (this.abort.signal.aborted)
+                return resolve();
+            const t = setTimeout(done, ms);
+            const onAbort = () => done();
+            function done() {
+                clearTimeout(t);
+                resolve();
+            }
+            this.abort.signal.addEventListener('abort', onAbort, { once: true });
+        });
     }
     async handleRun(plan, run) {
         const label = run.issueIdentifier ?? `run-${run.id}`;
-        this.log(`[dhs-aplan] claimed run=${run.id} issue=${label} trigger=${run.trigger} attempts=${run.attempts}`);
-        const hb = setInterval(() => {
-            void plan.heartbeatRun(run.id).catch((e) => {
-                this.log(`[dhs-aplan] heartbeat failed run=${run.id}: ${e instanceof Error ? e.message : e}`);
+        this.log(`${this.tag} claimed run=${run.id} issue=${label} role=${this.config.role} trigger=${run.trigger} attempts=${run.attempts}`);
+        patchStatus(this.config.roleKey, {
+            role: this.config.role,
+            state: 'running',
+            lastClaimAt: new Date().toISOString(),
+            lastRunId: run.id,
+            lastError: undefined,
+        });
+        const state = { plan, run, reported: false };
+        this.inFlight = state;
+        let hbFailures = 0;
+        const beat = () => {
+            void plan.heartbeatRun(run.id).then(() => {
+                hbFailures = 0;
+                patchStatus(this.config.roleKey, {
+                    role: this.config.role,
+                    state: 'running',
+                    lastHeartbeatAt: new Date().toISOString(),
+                });
+            }, (e) => {
+                hbFailures += 1;
+                this.log(`${this.tag} heartbeat failed run=${run.id} (#${hbFailures}): ${e instanceof Error ? e.message : e}`);
             });
-        }, this.config.heartbeatIntervalMs);
+        };
+        beat();
+        const hb = setInterval(beat, Math.max(1000, this.config.heartbeatIntervalMs));
+        const report = async (body) => {
+            if (state.reported)
+                return;
+            state.reported = true;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    await plan.reportRun(run.id, body);
+                    return;
+                }
+                catch (e) {
+                    this.log(`${this.tag} result report failed run=${run.id} attempt=${attempt}: ${e instanceof Error ? e.message : e}`);
+                    if (attempt < 3)
+                        await new Promise((r) => setTimeout(r, 2000 * attempt));
+                }
+            }
+        };
         try {
             if (this.config.postClaimComment && run.issueId != null) {
                 await this.maybeComment(run);
             }
             if (this.config.mode === 'dry-run') {
                 const output = [
-                    '[dhs-aplan dry-run] claimed by 开发 role; Harness turn not executed.',
+                    `[dhs-aplan dry-run] claimed by ${this.config.role} role; Harness turn not executed.`,
                     `issue=${label}`,
                     `trigger=${run.trigger}`,
                     '--- systemPrompt ---',
@@ -67,36 +176,38 @@ export class DevRoleRunner {
                     '--- prompt ---',
                     run.prompt.slice(0, 4000),
                 ].join('\n');
-                await plan.reportRun(run.id, { status: 'success', output });
-                this.log(`[dhs-aplan] dry-run success run=${run.id}`);
+                await report({ status: 'success', output });
+                this.log(`${this.tag} dry-run success run=${run.id}`);
+                patchStatus(this.config.roleKey, { role: this.config.role, state: 'idle' });
                 return;
             }
-            // harness mode: stub until session dispatch is wired
-            await plan.reportRun(run.id, {
-                status: 'failed',
-                error: 'dhs-aplan mode=harness is not implemented yet; set mode=dry-run or wait for session dispatch.',
+            const output = await runHarnessTurn(this.ctx, this.config, run, this.log, {
+                signal: this.abort.signal,
             });
-            this.log(`[dhs-aplan] harness stub failed run=${run.id}`);
+            await report({ status: 'success', output });
+            this.log(`${this.tag} harness success run=${run.id}`);
+            patchStatus(this.config.roleKey, { role: this.config.role, state: 'idle' });
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.log(`[dhs-aplan] run failed run=${run.id}: ${message}`);
-            try {
-                await plan.reportRun(run.id, { status: 'failed', error: message });
-            }
-            catch (reportErr) {
-                this.log(`[dhs-aplan] result report also failed run=${run.id}: ${reportErr instanceof Error ? reportErr.message : reportErr}`);
-            }
+            this.log(`${this.tag} run failed run=${run.id}: ${message}`);
+            await report({ status: 'failed', error: message.slice(0, 4000) });
+            patchStatus(this.config.roleKey, {
+                role: this.config.role,
+                state: 'error',
+                lastError: safeErrorMessage(err),
+            });
         }
         finally {
             clearInterval(hb);
+            if (this.inFlight === state)
+                this.inFlight = undefined;
         }
     }
     async maybeComment(run) {
-        const bearer = (this.config.mcpBearerEnv.trim() ? resolveSecret(this.config.mcpBearerEnv) : '') ||
-            resolveSecret(this.config.claimKeyEnv);
+        const bearer = this.mcpBearer();
         if (!bearer) {
-            this.log('[dhs-aplan] skip MCP comment: no claim/MCP key');
+            this.log(`${this.tag} skip MCP comment: no claim/MCP key`);
             return;
         }
         const mcpUrl = `${this.config.baseUrl.replace(/\/+$/, '')}${this.config.mcpPath.startsWith('/') ? '' : '/'}${this.config.mcpPath}`;
@@ -105,15 +216,14 @@ export class DevRoleRunner {
             await mcp.initialize();
             await mcp.callTool(this.config.mcpCommentTool, {
                 issueId: run.issueId,
-                body: `【开发·dhs-aplan】已领取 run #${run.id}（mode=${this.config.mode}）。`,
+                body: `【${this.config.role}·dhs-aplan】已领取 run #${run.id}（mode=${this.config.mode}）。`,
             });
-            this.log(`[dhs-aplan] MCP comment posted issueId=${run.issueId}`);
+            this.log(`${this.tag} MCP comment posted issueId=${run.issueId}`);
         }
         catch (err) {
-            this.log(`[dhs-aplan] MCP comment skipped: ${err instanceof Error ? err.message : String(err)}`);
+            this.log(`${this.tag} MCP comment skipped: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
 }
-function sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
+/** Back-compat alias for 0.2.x imports. */
+export { RoleRunner as DevRoleRunner };

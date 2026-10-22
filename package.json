@@ -1,12 +1,14 @@
 {
   "name": "dhs-aplan",
-  "version": "0.1.0",
-  "description": "Its a Plan External Agent bridge for DeepSeek Harness (dev role MVP).",
+  "version": "0.3.9",
+  "description": "Its a Plan External Agent bridge for DeepSeek Harness (multi-role runners, CodexHub-style session titles, in-app settings page).",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -16,20 +18,30 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ],
+      "platform": "web"
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').copyFileSync('client/client.js','dist/client.js')\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:title": "node scripts/test-title.mjs"
   },
   "dependencies": {},
-  "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.5"
-  },
+  "peerDependencies": {},
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.5",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
     "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
     "@types/node": "^22.10.0",
     "typescript": "^5.6.0"
   }

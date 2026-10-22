@@ -1,4 +1,18 @@
-﻿/** Thin JSON-RPC client for Plan /mcp (Bearer ≠ claim x-api-key). */
+/** Thin JSON-RPC client for Plan /mcp (Bearer ≈ claim x-api-key). */
+
+export type McpToolInfo = {
+  name: string
+  description?: string
+  inputSchema?: Record<string, unknown>
+  outputSchema?: Record<string, unknown>
+}
+
+export type McpCallToolResult = {
+  content?: Array<{ type?: string; text?: string; [k: string]: unknown }>
+  structuredContent?: unknown
+  isError?: boolean
+  [k: string]: unknown
+}
 
 export class McpClient {
   private nextId = 1
@@ -42,7 +56,7 @@ export class McpClient {
     await this.rpc('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
-      clientInfo: { name: 'dhs-aplan', version: '0.1.0' },
+      clientInfo: { name: 'dhs-aplan', version: '0.2.3' },
     })
     // notifications/initialized has no id in some servers; ignore failures
     try {
@@ -59,7 +73,12 @@ export class McpClient {
     }
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
-    return this.rpc('tools/call', { name, arguments: args })
+  async listTools(): Promise<McpToolInfo[]> {
+    const result = await this.rpc<{ tools?: McpToolInfo[] }>('tools/list', {})
+    return Array.isArray(result?.tools) ? result.tools : []
+  }
+
+  async callTool(name: string, args: Record<string, unknown>): Promise<McpCallToolResult> {
+    return this.rpc<McpCallToolResult>('tools/call', { name, arguments: args })
   }
 }

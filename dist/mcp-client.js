@@ -1,4 +1,4 @@
-/** Thin JSON-RPC client for Plan /mcp (Bearer ≠ claim x-api-key). */
+/** Thin JSON-RPC client for Plan /mcp (Bearer ≈ claim x-api-key). */
 export class McpClient {
     mcpUrl;
     bearer;
@@ -42,7 +42,7 @@ export class McpClient {
         await this.rpc('initialize', {
             protocolVersion: '2024-11-05',
             capabilities: {},
-            clientInfo: { name: 'dhs-aplan', version: '0.1.0' },
+            clientInfo: { name: 'dhs-aplan', version: '0.2.3' },
         });
         // notifications/initialized has no id in some servers; ignore failures
         try {
@@ -58,6 +58,10 @@ export class McpClient {
         catch {
             /* optional */
         }
+    }
+    async listTools() {
+        const result = await this.rpc('tools/list', {});
+        return Array.isArray(result?.tools) ? result.tools : [];
     }
     async callTool(name, args) {
         return this.rpc('tools/call', { name, arguments: args });

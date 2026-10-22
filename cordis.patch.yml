@@ -1,15 +1,36 @@
 # dhs-aplan bundle layer — applied when a profile lists this bundle.
-# Claim + MCP use the same Plan external-agent key by default (x-api-key / Bearer).
+# All fields are editable in DSH: 插件 → dhs-aplan → 配置 (saved to the profile patch, applied live).
+# Keys: prefer GUI secret fields (DSH credentials store). *Env fields are ref names (APLAN_*), never key values.
 - insert:
     - id: dhs-aplan
       name: dhs-aplan
       config:
+        enabled: true
         baseUrl: http://192.168.10.146:8001
-        claimKeyEnv: ITSAPLAN_KEY_DEV
+        role: 开发
+        claimKeyEnv: APLAN_KEY_DEV
         mcpBearerEnv: ""
         mcpPath: /mcp
         pollIntervalMs: 5000
         heartbeatIntervalMs: 15000
-        mode: dry-run
+        turnTimeoutMs: 2700000
+        mode: harness
         postClaimComment: true
         mcpCommentTool: create_issue_comment
+        cwd: "E:\\WorkSpaces\\aida700-ERP"
+        provider: openai
+        model: gpt-5.6-terra
+        reasoningEffort: high
+        sessionIdPrefix: dhs-aplan-
+        reuseSessionPerIssue: true
+        mountPlanMcp: true
+        disposeAfterRun: false
+        setSessionTitle: true
+        renameExistingSession: true
+        # Multi-role: leave [] for single role above. Each item inherits the top level.
+        # - { key: review, role: 评审, claimKeyEnv: APLAN_KEY_REVIEW, mcpBearerEnv: APLAN_MCP_REVIEW }
+        archiveDoneThreads: false
+        archiveDryRun: true
+        archiveSweepMinutes: 240
+        archiveGraceMinutes: 30
+        roles: []
