@@ -1,4 +1,4 @@
-﻿import type { Context } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import path from 'node:path'
 
 export type WorkspaceAttachLogFn = (msg: string) => void
@@ -13,7 +13,14 @@ type WorkspaceRegistry = {
   create: (path: string, title?: string) => Promise<WorkspaceEntity>
 }
 
-/** Place a session under the workspace path bucket so it shows in the workbench. */
+/**
+ * Place a session under the workspace path bucket so it shows in the workbench.
+ *
+ * Always call attachSession even when sessionIds already lists the id: after
+ * quarantine/delete, workspace.json can keep a stale membership while
+ * workspace-registry filters the session from live UI (header missing). Skipping
+ * attach in that case leaves a recreated session under 「未分组」.
+ */
 export async function ensureWorkspaceAttached(
   ctx: Context,
   sessionId: string,
@@ -35,15 +42,14 @@ export async function ensureWorkspaceAttached(
       entity = await registry.create(cwd, title)
       log(`${tag} created workspace title=${title} path=${cwd}`)
     }
-    const already = entity.record?.sessionIds?.includes(sessionId)
-    if (already) {
-      log(`${tag} session already on workspace path=${entity.record?.path ?? cwd}`)
-      return
-    }
+    const listed = entity.record?.sessionIds?.includes(sessionId) === true
     await entity.attachSession(sessionId)
-    log(
-      `${tag} attached session=${sessionId} to workspace=${entity.record?.title ?? path.basename(cwd)}`,
-    )
+    const title = entity.record?.title ?? path.basename(cwd)
+    if (listed) {
+      log(`${tag} re-attached session=${sessionId} to workspace=${title} (ensure live membership)`)
+    } else {
+      log(`${tag} attached session=${sessionId} to workspace=${title}`)
+    }
   } catch (err) {
     log(
       `${tag} workspace attach failed session=${sessionId}: ${
