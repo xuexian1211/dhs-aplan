@@ -4,6 +4,7 @@ import path from 'node:path';
 import { mountPlanMcpTools } from './plan-mcp-tools.js';
 import { sessionTitleForRun } from './title.js';
 import { hostCtx } from './host-ctx.js';
+import { ensureAgentPreset } from './ensure-agent-preset.js';
 /** Side-effect imports so Context gains `agents` / `systemPrompt` typings. */
 import '@deepseek-ai/dsh-agent';
 import '@deepseek-ai/dsh-system-prompt';
@@ -48,7 +49,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
             handle = await agents.create({
                 sessionId,
                 ...(agentOptions ? { agentOptions } : {}),
-                ...(meta ? { meta } : {}),
+                meta,
                 setup,
             });
             agent = handle.agent;
@@ -60,7 +61,7 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
         handle = await agents.create({
             sessionId,
             ...(agentOptions ? { agentOptions } : {}),
-            ...(meta ? { meta } : {}),
+            meta,
             setup,
         });
         agent = handle.agent;
@@ -77,6 +78,9 @@ export async function runHarnessTurn(ctx, config, run, log, options = {}) {
     else if (createdFresh) {
         log(`${tag} no config.cwd; session will stay ungrouped unless the profile sets cwd`);
     }
+    // Host tool-fs/bash/pwsh are disabled on the web plane; coding tools live in agent presets.
+    // meta.agentPreset covers fresh creates; ensureAgentPreset covers resume/live reuse.
+    await ensureAgentPreset(ctx, agent, log, tag);
     let turnError;
     const stopErrorWatch = watchAgentError(agent, (error) => {
         turnError = error;
@@ -230,13 +234,17 @@ function readDefaultModel(ctx) {
     }
 }
 function buildSessionMeta(config) {
+    // UI-created workspace sessions always set meta.agentPreset (usually "standard").
+    // Omitting it leaves harness agents with Plan MCP only — no tool-fs/shell/git.
     const cwd = config.cwd.trim();
-    if (!cwd)
-        return undefined;
-    if (!path.isAbsolute(cwd)) {
+    if (cwd && !path.isAbsolute(cwd)) {
         throw new Error(`dhs-aplan config.cwd must be an absolute path, got: ${cwd}`);
     }
-    return { cwd };
+    const agentPreset = 'standard';
+    return {
+        ...(cwd ? { cwd } : {}),
+        agentPreset,
+    };
 }
 async function ensureWorkspaceAttached(ctx, sessionId, cwd, log, tag) {
     const registry = ctx.workspaceRegistry ??

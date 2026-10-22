@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { Config } from './config.js'
 import { hostCtx } from './host-ctx.js'
+import { ensureAgentPreset } from './ensure-agent-preset.js'
 import { mountPlanMcpTools } from './plan-mcp-tools.js'
 
 /** Side-effect imports so Context gains `agents` typings. */
@@ -78,6 +79,10 @@ export async function rehydrateAplanSessions(
             await mountPlanMcpTools(agentCtx, role, log)
           },
         })
+        const live = host.agents.get(sessionId)
+        if (live) {
+          await ensureAgentPreset(host, live, log, `[dhs-aplan:${role.roleKey || '_'}]`)
+        }
         resumed += 1
         log(`[dhs-aplan:${role.roleKey || '_'}] rehydrated session=${rawId}`)
       } catch (err) {

@@ -2,6 +2,7 @@ import { SessionId } from '@deepseek-ai/dsh-session';
 import fs from 'node:fs';
 import path from 'node:path';
 import { hostCtx } from './host-ctx.js';
+import { ensureAgentPreset } from './ensure-agent-preset.js';
 import { mountPlanMcpTools } from './plan-mcp-tools.js';
 /** Side-effect imports so Context gains `agents` typings. */
 import '@deepseek-ai/dsh-agent';
@@ -54,6 +55,10 @@ export async function rehydrateAplanSessions(ctx, configs, log) {
                         await mountPlanMcpTools(agentCtx, role, log);
                     },
                 });
+                const live = host.agents.get(sessionId);
+                if (live) {
+                    await ensureAgentPreset(host, live, log, `[dhs-aplan:${role.roleKey || '_'}]`);
+                }
                 resumed += 1;
                 log(`[dhs-aplan:${role.roleKey || '_'}] rehydrated session=${rawId}`);
             }
