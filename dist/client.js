@@ -3,7 +3,7 @@
 // Slot must use options.key = package name ("dhs-aplan"); plugin-manager matches
 // plugins.bundle.config via entryKey: pkg.name (keyed slot), not id.
 //
-// Layout (0.3.6): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
+// Layout (0.3.7): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
 // Per-role cards: Identity + Connection secret fields (claimKey/mcpBearer password) + status; claimKeyEnv/mcpBearerEnv in advanced;
 // mcpPath + mcpCommentTool + Run + Session collapse into default-closed 「高级选项」 accordion
 // (expand state per card, component state only).
@@ -104,7 +104,7 @@ window.__ModuleLoader__.load({
 			overridden: "已覆盖", reset: "恢复默认",
 			readOnly: "本部署的设置为只读。", unavailable: "dhs-aplan 未加载（或缺少 schema），暂时无法配置。",
 			save: "保存", saving: "保存中…", saveFailed: "部署没有接受这些值，已保留供你修改。",
-			groupGlobal: "全局", groupSiteSession: "全站默认 · 会话", groupRoles: "角色",
+			groupGlobal: "全局", groupArchive: "自动归档", groupSiteSession: "全站默认 · 会话", groupRoles: "角色",
 			claimKey: "领取 Key", claimKeyHint: "直接粘贴 API Key（密码框）；保存后写入 DSH 凭据库，不会写进 patch。已保存则留空保持。",
 			mcpBearer: "MCP 写回 Key（可选，空=同领取）", mcpBearerHint: "留空 = 与领取 Key 相同。",
 			claimKeyEnv: "领取 Key 环境变量名（高级）", claimKeyEnvHint: "一般不用改。默认 APLAN_KEY_<角色>；也可填自定义凭据名。",
@@ -157,7 +157,7 @@ window.__ModuleLoader__.load({
 			cwdBrowseUnavailable: "No native folder picker here — type an absolute path.",
 			siteDefaults: "Site defaults",
 			save: "Save", saving: "Saving…", reset: "Reset", overridden: "Overridden",
-			groupGlobal: "Global", groupSiteSession: "Site defaults · Session", groupRoles: "Roles",
+			groupGlobal: "Global", groupArchive: "Auto-archive", groupSiteSession: "Site defaults · Session", groupRoles: "Roles",
 			claimKey: "Claim key", claimKeyHint: "Paste the API key (password field). Saved into the DSH credentials store, never into the patch. Leave blank to keep.",
 			mcpBearer: "MCP writeback key (optional, empty=same as claim)", mcpBearerHint: "Empty = reuse claim key.",
 			claimKeyEnv: "Claim key env/ref (advanced)", claimKeyEnvHint: "Usually leave as APLAN_KEY_<role>.",
@@ -1151,81 +1151,7 @@ function RoleField(props) {
 		const inject = ["slots", "locale"];
 		function apply(ctx) {
 			const t = ctx.locale.bind(NS);
-			try {
-				Controller._remoteCredentials = (ctx.remote && ctx.remote.credentials) ? ctx.remote.credentials : null;
-			} catch (_) { Controller._remoteCredentials = null; }
-			if (!Controller._remoteCredentials && ctx.reflect && typeof ctx.reflect.get === "function") {
-				try {
-					const remote = ctx.reflect.get("remote", false);
-					if (remote && remote.credentials) Controller._remoteCredentials = remote.credentials;
-				} catch (_) {}
-			}
-			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dhs-aplan: dictionaries");
-
-			// Soft-read DSH workspace registry paths for cwd datalist (no hard inject).
-			try {
-				const uiWs = ctx.reflect && typeof ctx.reflect.get === "function"
-					? ctx.reflect.get("uiWorkspace", false)
-					: null;
-				if (uiWs) refreshKnownWorkspaces(uiWs);
-			} catch (_) {}
-			if (typeof ctx.inject === "function") {
-				ctx.effect(
-					() =>
-						ctx.inject(["uiWorkspace"], (c) => {
-							refreshKnownWorkspaces(c.uiWorkspace);
-							let unsub = null;
-							try {
-								if (c.uiWorkspace.workspaces && c.uiWorkspace.workspaces.list && typeof c.uiWorkspace.workspaces.list.subscribe === "function") {
-									unsub = c.uiWorkspace.workspaces.list.subscribe(() => refreshKnownWorkspaces(c.uiWorkspace));
-								}
-							} catch (_) {}
-							return () => { try { unsub && unsub(); } catch (_) {} };
-						}),
-					"dhs-aplan: workspaces",
-				);
-			}
-
 			let card = null;
-			const attachForm = (forms) => {
-				try {
-					if (!forms || typeof forms.get !== "function") return;
-					if (card) {
-						try { card.dispose(); } catch (_) {}
-						card = null;
-					}
-					const remoteCred = (typeof ctx !== "undefined" && ctx.remote && ctx.remote.credentials) ? ctx.remote.credentials : (Controller._remoteCredentials || null);
-					card = new Controller(forms.get(CONFIG_NS), remoteCred);
-				} catch (err) {
-					console.warn("[dhs-aplan] configForms soft-fail:", err && err.message ? err.message : err);
-					card = null;
-				}
-			};
-			// Eager soft-read (no inject hard-dep) + delayed inject when service appears.
-			try {
-				const forms = ctx.reflect && typeof ctx.reflect.get === "function"
-					? ctx.reflect.get("configForms", false)
-					: null;
-				attachForm(forms);
-			} catch (err) {
-				console.warn("[dhs-aplan] configForms soft-fail:", err && err.message ? err.message : err);
-			}
-			if (typeof ctx.inject === "function") {
-				ctx.effect(
-					() =>
-						ctx.inject(["configForms"], (c) => {
-							attachForm(c.configForms);
-							return () => {
-								try { card && card.dispose(); } catch (_) {}
-								card = null;
-							};
-						}),
-					"dhs-aplan: form",
-				);
-			} else if (card) {
-				ctx.effect(() => () => { try { card && card.dispose(); } catch (_) {} }, "dhs-aplan: form");
-			}
-
 			const emptyInject = () => ({
 				hooks: {
 					aplanCard: {
@@ -1244,24 +1170,109 @@ function RoleField(props) {
 				discard: () => {},
 			});
 
-			// Unconditional keyed registration: key = package name (not id).
-			ctx.effect(
-				() =>
-					ctx.slots.inject("plugins.bundle.config", () =>
-						ctx.slots.register(
-							{
-								name: "plugins.bundle.config",
-								key: PACKAGE_KEY,
-								order: 50,
-								label: () => t("title"),
-								locale: NS,
-								inject: () => (card ? card.inject() : emptyInject()),
-							},
-							AplanCard,
-						),
-					),
-				"dhs-aplan: bundle page",
+			// Register keyed slot FIRST (before locale/form/credentials). DSH 0.1.7 plugin
+			// detail only shows 配置 when ledger.bundles has options.key === pkg.name.
+			// Any throw in later setup must not skip this (same symptom as key/id bug).
+			ctx.slots.inject("plugins.bundle.config", () =>
+				ctx.slots.register(
+					{
+						name: "plugins.bundle.config",
+						key: PACKAGE_KEY,
+						order: 50,
+						label: () => t("title"),
+						locale: NS,
+						inject: () => (card ? card.inject() : emptyInject()),
+					},
+					AplanCard,
+				),
 			);
+			console.info("[dhs-aplan] plugins.bundle.config registered key=" + PACKAGE_KEY);
+
+			try {
+				Controller._remoteCredentials = (ctx.remote && ctx.remote.credentials) ? ctx.remote.credentials : null;
+			} catch (_) { Controller._remoteCredentials = null; }
+			if (!Controller._remoteCredentials && ctx.reflect && typeof ctx.reflect.get === "function") {
+				try {
+					const remote = ctx.reflect.get("remote", false);
+					if (remote && remote.credentials) Controller._remoteCredentials = remote.credentials;
+				} catch (_) {}
+			}
+
+			try {
+				ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dhs-aplan: dictionaries");
+			} catch (err) {
+				console.warn("[dhs-aplan] locale.register soft-fail:", err && err.message ? err.message : err);
+			}
+
+			// Soft-read DSH workspace registry paths for cwd datalist (no hard inject).
+			try {
+				const uiWs = ctx.reflect && typeof ctx.reflect.get === "function"
+					? ctx.reflect.get("uiWorkspace", false)
+					: null;
+				if (uiWs) refreshKnownWorkspaces(uiWs);
+			} catch (_) {}
+			if (typeof ctx.inject === "function") {
+				try {
+					ctx.effect(
+						() =>
+							ctx.inject(["uiWorkspace"], (c) => {
+								refreshKnownWorkspaces(c.uiWorkspace);
+								let unsub = null;
+								try {
+									if (c.uiWorkspace.workspaces && c.uiWorkspace.workspaces.list && typeof c.uiWorkspace.workspaces.list.subscribe === "function") {
+										unsub = c.uiWorkspace.workspaces.list.subscribe(() => refreshKnownWorkspaces(c.uiWorkspace));
+									}
+								} catch (_) {}
+								return () => { try { unsub && unsub(); } catch (_) {} };
+							}),
+						"dhs-aplan: workspaces",
+					);
+				} catch (err) {
+					console.warn("[dhs-aplan] uiWorkspace soft-fail:", err && err.message ? err.message : err);
+				}
+			}
+
+			const attachForm = (forms) => {
+				try {
+					if (!forms || typeof forms.get !== "function") return;
+					if (card) {
+						try { card.dispose(); } catch (_) {}
+						card = null;
+					}
+					const remoteCred = (typeof ctx !== "undefined" && ctx.remote && ctx.remote.credentials) ? ctx.remote.credentials : (Controller._remoteCredentials || null);
+					card = new Controller(forms.get(CONFIG_NS), remoteCred);
+				} catch (err) {
+					console.warn("[dhs-aplan] configForms soft-fail:", err && err.message ? err.message : err);
+					card = null;
+				}
+			};
+			try {
+				const forms = ctx.reflect && typeof ctx.reflect.get === "function"
+					? ctx.reflect.get("configForms", false)
+					: null;
+				attachForm(forms);
+			} catch (err) {
+				console.warn("[dhs-aplan] configForms soft-fail:", err && err.message ? err.message : err);
+			}
+			if (typeof ctx.inject === "function") {
+				try {
+					ctx.effect(
+						() =>
+							ctx.inject(["configForms"], (c) => {
+								attachForm(c.configForms);
+								return () => {
+									try { card && card.dispose(); } catch (_) {}
+									card = null;
+								};
+							}),
+						"dhs-aplan: form",
+					);
+				} catch (err) {
+					console.warn("[dhs-aplan] configForms inject soft-fail:", err && err.message ? err.message : err);
+				}
+			} else if (card) {
+				ctx.effect(() => () => { try { card && card.dispose(); } catch (_) {} }, "dhs-aplan: form");
+			}
 		}
 		exports.NS = NS;
 		exports.apply = apply;

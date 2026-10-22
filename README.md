@@ -1,6 +1,6 @@
 # dhs-aplan
 
-DeepSeek Harness × It's a Plan 插件（包名 `dhs-aplan`，0.3.6）。目标是取代 CodexHub 的 itsaplan 通道；Plan 本身不改。
+DeepSeek Harness × It's a Plan 插件（包名 `dhs-aplan`，0.3.7）。目标是取代 CodexHub 的 itsaplan 通道；Plan 本身不改。
 规划与进度见 [docs/roadmap-phase2-3.md](docs/roadmap-phase2-3.md)。
 
 ## 闭环（每个角色一条）
@@ -90,7 +90,7 @@ Desktop generation 已装时，只把 `dist/`、`package.json`、`cordis.patch.y
 插件页「配置」→「多角色」为可增删列表（类似 CodexHub 账号列表）。空列表 = 只用上方单角色默认（开发）。点「填入五角色模板」可写入需求分析/架构/开发/评审/测试五行，环境变量名分别为 APLAN_KEY_REQ|SWA|DEV|REVIEW|TEST 与对应 APLAN_MCP_*（开发 MCP 可留空复用领取 Key）。只填变量名，不存密钥。
 
 
-## 0.3.6 要点
+## 0.3.7 要点
 
 - **直接填 Key**：角色卡密码框 → DSH credentials 存储（APLAN_KEY_<ROLE> / APLAN_MCP_<ROLE>）。
 - **连接状态**：设置页顶部与每卡显示 已接入 / 未接入 / 已暂停；关闭「启用」即暂停领取。
