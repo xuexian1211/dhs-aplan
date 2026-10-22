@@ -33,6 +33,12 @@ export interface RoleConfig {
   mountPlanMcp?: boolean
   setSessionTitle?: boolean
   renameExistingSession?: boolean
+  /**
+   * DSH session permission preset (`ctx.permissionPresets.set`).
+   * Shipped values: `workspace-write` (标准/工作区内修改) | `danger-full-access` (完全权限).
+   * Empty = role-key default (dev/test → danger-full-access; else workspace-write).
+   */
+  permissionPreset?: string
 }
 
 /** Fully resolved config for one role runner. */
@@ -107,6 +113,11 @@ export interface Config {
    * Windows only. Default true; set false to skip.
    */
   fixRuntimeAcl: boolean
+  /**
+   * Resolved DSH permission preset applied on harness session create/reuse.
+   * See RoleConfig.permissionPreset.
+   */
+  permissionPreset: string
 }
 
 /** Raw plugin config as written in cordis.patch.yml / GUI. */
@@ -147,6 +158,7 @@ export const defaultConfig: Config = {
   archiveSweepMinutes: 240,
   archiveGraceMinutes: 30,
   fixRuntimeAcl: true,
+  permissionPreset: 'workspace-write',
 }
 
 function pick<T>(value: T | undefined | null, fallback: T): T {
@@ -189,11 +201,37 @@ function base(raw: RawConfig): Config {
  * No `roles` (or empty) = single top-level runner (back-compat with 0.2.x).
  * Prefer GUI writing roles[0] so multi-role and single-role share one model.
  */
+
+/** Shipped DSH permission preset ids (see @deepseek-ai/dsh-permission-presets). */
+export const PERMISSION_PRESETS = ['workspace-write', 'danger-full-access'] as const
+export type PermissionPresetId = (typeof PERMISSION_PRESETS)[number]
+
+/** Role-key defaults: coding/test roles get full access; planning roles stay standard. */
+export function defaultPermissionPresetForRoleKey(roleKey: string): PermissionPresetId {
+  const k = String(roleKey || '').trim().toLowerCase()
+  if (k === 'dev' || k === 'test') return 'danger-full-access'
+  return 'workspace-write'
+}
+
+/** Normalize a raw preset string; unknown/empty values fall back to `fallback`. */
+export function normalizePermissionPreset(
+  raw: string | undefined | null,
+  fallback: PermissionPresetId,
+): PermissionPresetId {
+  const v = String(raw ?? '').trim()
+  if (!v) return fallback
+  if ((PERMISSION_PRESETS as readonly string[]).includes(v)) return v as PermissionPresetId
+  return fallback
+}
+
 export function resolveRoles(raw: RawConfig): Config[] {
   const top = base(raw)
   if (!top.enabled) return []
   const roles = Array.isArray(raw.roles) ? raw.roles.filter((r) => r && typeof r === 'object') : []
-  if (roles.length === 0) return [top]
+  if (roles.length === 0) {
+    top.permissionPreset = normalizePermissionPreset(top.permissionPreset, defaultPermissionPresetForRoleKey(top.roleKey || 'dev'))
+    return [top]
+  }
   const seen = new Set<string>()
   const out: Config[] = []
   roles.forEach((r, i) => {
@@ -224,6 +262,10 @@ export function resolveRoles(raw: RawConfig): Config[] {
       mountPlanMcp: true, // always on; per-role false broke AE-133 req
       setSessionTitle: pickBool(r.setSessionTitle, top.setSessionTitle),
       renameExistingSession: pickBool(r.renameExistingSession, top.renameExistingSession),
+      permissionPreset: normalizePermissionPreset(
+        r.permissionPreset !== undefined && r.permissionPreset !== null ? String(r.permissionPreset) : undefined,
+        defaultPermissionPresetForRoleKey(key),
+      ),
     })
   })
   return out

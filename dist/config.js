@@ -36,6 +36,7 @@ export const defaultConfig = {
     archiveSweepMinutes: 240,
     archiveGraceMinutes: 30,
     fixRuntimeAcl: true,
+    permissionPreset: 'workspace-write',
 };
 function pick(value, fallback) {
     if (value === undefined || value === null)
@@ -79,13 +80,33 @@ function base(raw) {
  * No `roles` (or empty) = single top-level runner (back-compat with 0.2.x).
  * Prefer GUI writing roles[0] so multi-role and single-role share one model.
  */
+/** Shipped DSH permission preset ids (see @deepseek-ai/dsh-permission-presets). */
+export const PERMISSION_PRESETS = ['workspace-write', 'danger-full-access'];
+/** Role-key defaults: coding/test roles get full access; planning roles stay standard. */
+export function defaultPermissionPresetForRoleKey(roleKey) {
+    const k = String(roleKey || '').trim().toLowerCase();
+    if (k === 'dev' || k === 'test')
+        return 'danger-full-access';
+    return 'workspace-write';
+}
+/** Normalize a raw preset string; unknown/empty values fall back to `fallback`. */
+export function normalizePermissionPreset(raw, fallback) {
+    const v = String(raw ?? '').trim();
+    if (!v)
+        return fallback;
+    if (PERMISSION_PRESETS.includes(v))
+        return v;
+    return fallback;
+}
 export function resolveRoles(raw) {
     const top = base(raw);
     if (!top.enabled)
         return [];
     const roles = Array.isArray(raw.roles) ? raw.roles.filter((r) => r && typeof r === 'object') : [];
-    if (roles.length === 0)
+    if (roles.length === 0) {
+        top.permissionPreset = normalizePermissionPreset(top.permissionPreset, defaultPermissionPresetForRoleKey(top.roleKey || 'dev'));
         return [top];
+    }
     const seen = new Set();
     const out = [];
     roles.forEach((r, i) => {
@@ -118,6 +139,7 @@ export function resolveRoles(raw) {
             mountPlanMcp: true, // always on; per-role false broke AE-133 req
             setSessionTitle: pickBool(r.setSessionTitle, top.setSessionTitle),
             renameExistingSession: pickBool(r.renameExistingSession, top.renameExistingSession),
+            permissionPreset: normalizePermissionPreset(r.permissionPreset !== undefined && r.permissionPreset !== null ? String(r.permissionPreset) : undefined, defaultPermissionPresetForRoleKey(key)),
         });
     });
     return out;

@@ -51,11 +51,11 @@ window.__ModuleLoader__.load({
 
 
 		const FIVE_ROLE_TEMPLATE = [
-			{ key: "req", role: "需求分析", claimKeyEnv: "APLAN_KEY_REQ", mcpBearerEnv: "APLAN_MCP_REQ", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
-			{ key: "swa", role: "架构", claimKeyEnv: "APLAN_KEY_SWA", mcpBearerEnv: "APLAN_MCP_SWA", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
-			{ key: "dev", role: "开发", claimKeyEnv: "APLAN_KEY_DEV", mcpBearerEnv: "", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
-			{ key: "review", role: "评审", claimKeyEnv: "APLAN_KEY_REVIEW", mcpBearerEnv: "APLAN_MCP_REVIEW", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
-			{ key: "test", role: "测试", claimKeyEnv: "APLAN_KEY_TEST", mcpBearerEnv: "APLAN_MCP_TEST", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
+			{ key: "req", role: "需求分析", permissionPreset: "workspace-write", claimKeyEnv: "APLAN_KEY_REQ", mcpBearerEnv: "APLAN_MCP_REQ", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
+			{ key: "swa", role: "架构", permissionPreset: "workspace-write", claimKeyEnv: "APLAN_KEY_SWA", mcpBearerEnv: "APLAN_MCP_SWA", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
+			{ key: "dev", role: "开发", permissionPreset: "danger-full-access", claimKeyEnv: "APLAN_KEY_DEV", mcpBearerEnv: "", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
+			{ key: "review", role: "评审", permissionPreset: "workspace-write", claimKeyEnv: "APLAN_KEY_REVIEW", mcpBearerEnv: "APLAN_MCP_REVIEW", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
+			{ key: "test", role: "测试", permissionPreset: "danger-full-access", claimKeyEnv: "APLAN_KEY_TEST", mcpBearerEnv: "APLAN_MCP_TEST", enabled: true, mode: "harness", cwd: "", postClaimComment: true, mountPlanMcp: true },
 		];
 
 		const zh = {
@@ -94,6 +94,19 @@ window.__ModuleLoader__.load({
 			sectionIdentity: "身份",
 			sectionConn: "连接与 Key",
 			sectionRun: "运行",
+			permissionPreset: "会话权限",
+			permissionPresetHint: "对应 DSH 会话权限选择器：标准=工作区内修改（workspace-write），完全权限=danger-full-access。dev/test 默认完全权限，其它角色默认标准。新建/续跑会写入会话。",
+			permissionPresetStandard: "标准（工作区内修改）",
+			permissionPresetFull: "完全权限",
+			sectionPermission: "工作区权限",
+			groupConfigIo: "配置导入/导出",
+			configExport: "导出配置",
+			configImport: "导入配置",
+			configImportMerge: "按角色 key 合并",
+			configImportReplace: "替换全部角色",
+			configIoHint: "导出/导入插件易变配置（角色、cwd、模型、前缀、权限、MCP *Env 引用名）。不含密钥明文，仅 credential ref。支持 JSON；同时导出 YAML。",
+			configIoOk: "已应用导入",
+			configIoFail: "导入失败：格式或字段无效",
 			sectionSession: "会话（本角色）",
 			sectionAdvanced: "高级选项",
 			cwdBrowse: "浏览…",
@@ -140,6 +153,19 @@ window.__ModuleLoader__.load({
 			description: "It's a Plan external agent: claim → Harness session → report.",
 			modeHint: "harness = real Agent turn; dry-run = claim/comment then success without a Harness turn (for integration tests).",
 			cwd: "Working directory (absolute, optional)", cwdHint: "Empty = no cwd / session stays ungrouped. Must be absolute when set.",
+			permissionPreset: "Session permission",
+			permissionPresetHint: "Maps to the DSH session permission control: Standard = workspace-write; Full access = danger-full-access. Defaults: dev/test → full; others → standard. Applied on create/reuse.",
+			permissionPresetStandard: "Standard (workspace write)",
+			permissionPresetFull: "Full access",
+			sectionPermission: "Workspace permissions",
+			groupConfigIo: "Config import/export",
+			configExport: "Export config",
+			configImport: "Import config",
+			configImportMerge: "Merge by role key",
+			configImportReplace: "Replace all roles",
+			configIoHint: "Export/import volatile plugin config (roles, cwd, model, prefixes, permission, MCP *Env ref names). No raw secrets — credential refs only. JSON (+ YAML export).",
+			configIoOk: "Import applied",
+			configIoFail: "Import failed: invalid format or fields",
 			roles: "Roles",
 			rolesHint: "One card per role (identity / connection / run / session). Empty list shows one editable default card that writes roles[0].",
 			rolesAdd: "Add role",
@@ -210,7 +236,7 @@ window.__ModuleLoader__.load({
 			["groupGlobal", [["enabled", bool], ["baseUrl", text], ["pollIntervalMs", num], ["heartbeatIntervalMs", num], ["turnTimeoutMs", num]]],
 			["groupArchive", [["archiveDoneThreads", bool], ["archiveDryRun", bool], ["archiveSweepMinutes", num], ["archiveGraceMinutes", num]]],
 			["groupRuntimeAcl", [["fixRuntimeAcl", bool]]],
-			["groupSiteSession", [["setSessionTitle", bool], ["renameExistingSession", bool], ["reuseSessionPerIssue", bool], ["disposeAfterRun", bool]]],
+			["groupSiteSession", [["permissionPreset", text], ["setSessionTitle", bool], ["renameExistingSession", bool], ["reuseSessionPerIssue", bool], ["disposeAfterRun", bool]]],
 			["groupRoles", [["roles", json]]],
 		];
 		const SPECS = [];
@@ -302,6 +328,7 @@ window.__ModuleLoader__.load({
 				renameExistingSession: r.renameExistingSession === false ? false : (r.renameExistingSession === true ? true : undefined),
 				disposeAfterRun: r.disposeAfterRun === false ? false : (r.disposeAfterRun === true ? true : undefined),
 				mountPlanMcp: true,
+				permissionPreset: typeof r.permissionPreset === "string" ? r.permissionPreset : "",
 			};
 		}
 
@@ -325,12 +352,14 @@ window.__ModuleLoader__.load({
 				const model = String(r.model || "").trim();
 				const reasoningEffort = String(r.reasoningEffort || "").trim();
 				const sessionIdPrefix = String(r.sessionIdPrefix || "").trim();
+				const permissionPreset = String(r.permissionPreset || "").trim();
 				if (mcpPath) out.mcpPath = mcpPath;
 				if (mcpCommentTool) out.mcpCommentTool = mcpCommentTool;
 				if (provider) out.provider = provider;
 				if (model) out.model = model;
 				if (reasoningEffort) out.reasoningEffort = reasoningEffort;
 				if (sessionIdPrefix) out.sessionIdPrefix = sessionIdPrefix;
+				if (permissionPreset) out.permissionPreset = permissionPreset;
 				if (typeof r.reuseSessionPerIssue === "boolean") out.reuseSessionPerIssue = r.reuseSessionPerIssue;
 				if (typeof r.setSessionTitle === "boolean") out.setSessionTitle = r.setSessionTitle;
 				if (typeof r.renameExistingSession === "boolean") out.renameExistingSession = r.renameExistingSession;
@@ -361,6 +390,7 @@ window.__ModuleLoader__.load({
 				renameExistingSession: undefined,
 				disposeAfterRun: undefined,
 				mountPlanMcp: true,
+				permissionPreset: "danger-full-access",
 			};
 		}
 
@@ -698,6 +728,39 @@ function RoleField(props) {
 			});
 		}
 
+
+		/** DSH session permission preset: workspace-write (标准) vs danger-full-access (完全权限). */
+		function PermissionPresetSelect(props) {
+			const v = props.value === "danger-full-access" ? "danger-full-access" : "workspace-write";
+			return jsxs("label", {
+				style: FIELD,
+				children: [
+					jsxs("span", {
+						style: { display: "flex", alignItems: "center", gap: 6 },
+						children: [
+							jsx("span", { style: LABEL, children: props.label }),
+							jsx("span", {
+								style: HELP_BADGE,
+								title: props.hint,
+								"aria-label": props.hint,
+								children: "?",
+							}),
+						],
+					}),
+					jsxs("select", {
+						style: SELECT,
+						value: v,
+						disabled: props.disabled,
+						onChange: (e) => props.onChange(e.target.value),
+						children: [
+							selectOption("workspace-write", props.standardLabel || "workspace-write"),
+							selectOption("danger-full-access", props.fullLabel || "danger-full-access"),
+						],
+					}),
+				],
+			});
+		}
+
 		function RolesListEditor(props) {
 			const { t, disabled, fieldState, onEdit, onReset } = props;
 			// props.runtimeByKey / props.credByRef optional
@@ -878,6 +941,16 @@ function RoleField(props) {
 												],
 											}),
 											jsx(RoleBool, { label: t("mountPlanMcp"), value: role.mountPlanMcp !== false, disabled, onChange: (_c) => patch(index, { mountPlanMcp: true }) }),
+											jsx("div", { style: SECTION, children: t("sectionPermission") }),
+											jsx(PermissionPresetSelect, {
+												label: t("permissionPreset"),
+												hint: t("permissionPresetHint"),
+												standardLabel: t("permissionPresetStandard"),
+												fullLabel: t("permissionPresetFull"),
+												value: role.permissionPreset || (role.key === "dev" || role.key === "test" ? "danger-full-access" : "workspace-write"),
+												disabled,
+												onChange: (v) => patch(index, { permissionPreset: v }),
+											}),
 											jsx("div", { style: SECTION, children: t("sectionSession") }),
 											jsxs("div", {
 												style: GRID,
@@ -945,6 +1018,143 @@ function RoleField(props) {
 					}),
 				],
 			});
+		}
+
+
+		const EXPORT_TOP_FIELDS = [
+			"enabled", "baseUrl", "pollIntervalMs", "heartbeatIntervalMs", "turnTimeoutMs",
+			"archiveDoneThreads", "archiveDryRun", "archiveSweepMinutes", "archiveGraceMinutes",
+			"fixRuntimeAcl", "setSessionTitle", "renameExistingSession", "reuseSessionPerIssue",
+			"disposeAfterRun", "permissionPreset", "role", "claimKeyEnv", "mcpBearerEnv", "mcpPath",
+			"mcpCommentTool", "postClaimComment", "cwd", "provider", "model", "reasoningEffort",
+			"sessionIdPrefix", "mode", "mountPlanMcp",
+		];
+
+		function defaultPresetForKey(key) {
+			const k = String(key || "").trim().toLowerCase();
+			if (k === "dev" || k === "test") return "danger-full-access";
+			return "workspace-write";
+		}
+
+		function buildExportPayload(fields) {
+			const config = {};
+			for (const f of EXPORT_TOP_FIELDS) {
+				const fsField = fields[f];
+				if (!fsField) continue;
+				const text = String(fsField.text ?? "");
+				if (text === "" || text === "[]") continue;
+				if (f === "enabled" || f === "archiveDoneThreads" || f === "archiveDryRun" || f === "fixRuntimeAcl" || f === "setSessionTitle" || f === "renameExistingSession" || f === "reuseSessionPerIssue" || f === "disposeAfterRun" || f === "postClaimComment" || f === "mountPlanMcp") {
+					config[f] = text === "true";
+				} else if (f === "pollIntervalMs" || f === "heartbeatIntervalMs" || f === "turnTimeoutMs" || f === "archiveSweepMinutes" || f === "archiveGraceMinutes") {
+					const n = Number(text);
+					if (Number.isFinite(n)) config[f] = n;
+				} else {
+					config[f] = text;
+				}
+			}
+			const rolesFs = fields.roles;
+			const roles = parseRoles(rolesFs && rolesFs.text);
+			config.roles = roles.map((r) => {
+				const out = { ...r };
+				delete out.claimKey;
+				delete out.mcpBearer;
+				if (!out.permissionPreset) out.permissionPreset = defaultPresetForKey(out.key);
+				return out;
+			});
+			return {
+				version: 1,
+				plugin: "dsh-aplan",
+				exportedAt: new Date().toISOString(),
+				config,
+			};
+		}
+
+		function toSimpleYaml(obj, indent) {
+			const pad = "  ".repeat(indent || 0);
+			if (obj === null || obj === undefined) return "null";
+			if (typeof obj === "boolean" || typeof obj === "number") return String(obj);
+			if (typeof obj === "string") {
+				if (obj === "" || /[:#\n\r]|^s|s$/.test(obj)) return JSON.stringify(obj);
+				return obj;
+			}
+			if (Array.isArray(obj)) {
+				if (!obj.length) return "[]";
+				return obj.map((item) => {
+					if (item && typeof item === "object" && !Array.isArray(item)) {
+						const keys = Object.keys(item);
+						return keys.map((k, i) => {
+							const v = item[k];
+							const prefix = i === 0 ? (pad + "- ") : (pad + "  ");
+							if (v && typeof v === "object") return prefix + k + ":\n" + toSimpleYaml(v, (indent || 0) + 2);
+							return prefix + k + ": " + toSimpleYaml(v, 0);
+						}).join("\n");
+					}
+					return pad + "- " + toSimpleYaml(item, (indent || 0) + 1);
+				}).join("\n");
+			}
+			return Object.keys(obj).map((k) => {
+				const v = obj[k];
+				if (v && typeof v === "object") return pad + k + ":\n" + toSimpleYaml(v, (indent || 0) + 1);
+				return pad + k + ": " + toSimpleYaml(v, 0);
+			}).join("\n");
+		}
+
+		function downloadText(filename, text, mime) {
+			const blob = new Blob([text], { type: mime || "application/json;charset=utf-8" });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
+		}
+
+		function validateImportPayload(parsed) {
+			if (!parsed || typeof parsed !== "object") return { ok: false, error: "not-object" };
+			const config = parsed.config && typeof parsed.config === "object" ? parsed.config : parsed;
+			if (parsed.plugin && parsed.plugin !== "dsh-aplan" && parsed.plugin !== "dhs-aplan") {
+				return { ok: false, error: "plugin-mismatch" };
+			}
+			if (config.roles !== undefined && !Array.isArray(config.roles)) return { ok: false, error: "roles-not-array" };
+			const roles = Array.isArray(config.roles) ? config.roles : [];
+			for (const r of roles) {
+				if (!r || typeof r !== "object") return { ok: false, error: "role-invalid" };
+				if (r.permissionPreset && r.permissionPreset !== "workspace-write" && r.permissionPreset !== "danger-full-access") {
+					return { ok: false, error: "bad-permissionPreset" };
+				}
+				if (r.mode && r.mode !== "harness" && r.mode !== "dry-run") return { ok: false, error: "bad-mode" };
+				if (typeof r.claimKey === "string" && r.claimKey.trim()) return { ok: false, error: "raw-secret" };
+				if (typeof r.mcpBearer === "string" && r.mcpBearer.trim()) return { ok: false, error: "raw-secret" };
+			}
+			if (typeof config.claimKey === "string" && config.claimKey.trim()) return { ok: false, error: "raw-secret" };
+			if (typeof config.mcpBearer === "string" && config.mcpBearer.trim()) return { ok: false, error: "raw-secret" };
+			return { ok: true, config };
+		}
+
+		function applyImportToForm(edit, fields, config, mode) {
+			for (const f of EXPORT_TOP_FIELDS) {
+				if (config[f] === undefined || config[f] === null) continue;
+				if (typeof config[f] === "boolean") edit(f, config[f] ? "true" : "false");
+				else edit(f, String(config[f]));
+			}
+			if (Array.isArray(config.roles)) {
+				const incoming = config.roles.map(normalizeRole).filter(Boolean);
+				if (mode === "replace") {
+					edit("roles", serializeRoles(incoming));
+				} else {
+					const current = parseRoles(fields.roles && fields.roles.text);
+					const byKey = new Map();
+					for (const r of current) byKey.set(String(r.key || ""), r);
+					for (const r of incoming) {
+						const k = String(r.key || "");
+						if (!k) continue;
+						byKey.set(k, { ...(byKey.get(k) || blankRole()), ...r, key: k });
+					}
+					edit("roles", serializeRoles([...byKey.values()]));
+				}
+			}
 		}
 
 		function AplanCard(props) {
@@ -1019,6 +1229,61 @@ function RoleField(props) {
 					}, f));
 				}
 			}
+			children.push(jsx("h4", { style: { margin: "12px 0 0", fontSize: 13, fontWeight: 600 }, children: t("groupConfigIo") }, "g-config-io"));
+			children.push(jsx("p", { style: { margin: "4px 0 8px", fontSize: 12, color: "var(--dsw-alias-label-secondary, #666)" }, children: t("configIoHint") }, "hint-config-io"));
+			children.push(jsxs("div", {
+				style: ACTIONS,
+				children: [
+					jsx(P.Button, {
+						variant: "secondary",
+						size: "sm",
+						disabled,
+						onClick: () => {
+							try {
+								const payload = buildExportPayload(state.fields);
+								downloadText("dsh-aplan-config.json", JSON.stringify(payload, null, 2) + "\n", "application/json;charset=utf-8");
+								downloadText("dsh-aplan-config.yaml", toSimpleYaml(payload) + "\n", "text/yaml;charset=utf-8");
+							} catch (err) {
+								console.warn("[dsh-aplan] export failed", err);
+							}
+						},
+						children: t("configExport"),
+					}),
+					jsx(P.Button, {
+						variant: "ghost",
+						size: "sm",
+						disabled,
+						onClick: () => {
+							const input = document.createElement("input");
+							input.type = "file";
+							input.accept = ".json,application/json";
+							input.onchange = async () => {
+								const file = input.files && input.files[0];
+								if (!file) return;
+								try {
+									const text = await file.text();
+									let parsed;
+									try { parsed = JSON.parse(text); }
+									catch {
+										alert(t("configIoFail") + " (JSON only)");
+										return;
+									}
+									const checked = validateImportPayload(parsed);
+									if (!checked.ok) { alert(t("configIoFail") + ": " + checked.error); return; }
+									const mode = window.confirm(t("configImportReplace") + "?\nOK = replace / Cancel = " + t("configImportMerge")) ? "replace" : "merge";
+									applyImportToForm(props.edit, state.fields, checked.config, mode);
+									alert(t("configIoOk") + " (" + mode + ")");
+								} catch (err) {
+									console.warn("[dsh-aplan] import failed", err);
+									alert(t("configIoFail"));
+								}
+							};
+							input.click();
+						},
+						children: t("configImport"),
+					}),
+				],
+			}, "config-io-actions"));
 			const statusKids = [];
 			statusKids.push(jsx("h4", { style: { margin: "0 0 4px", fontSize: 13, fontWeight: 600 }, children: t("statusTitle") }, "status-title"));
 			statusKids.push(jsx("p", { style: { margin: "0 0 8px", fontSize: 12, color: "var(--dsw-alias-label-secondary, #666)" }, children: t("statusHint") }, "status-hint"));

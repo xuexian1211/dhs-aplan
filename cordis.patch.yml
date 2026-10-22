@@ -34,4 +34,6 @@
         archiveSweepMinutes: 240
         archiveGraceMinutes: 30
         fixRuntimeAcl: true
+        # Session permission preset: workspace-write (标准) | danger-full-access (完全权限)
+        permissionPreset: workspace-write
         roles: []

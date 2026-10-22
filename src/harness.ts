@@ -118,6 +118,10 @@ export async function runHarnessTurn(
   // meta.agentPreset covers fresh creates; ensureAgentPreset covers resume/live reuse.
   await ensureAgentPreset(ctx, agent, log, tag)
 
+  // Session permission / sandbox mode (标准 workspace-write vs 完全权限 danger-full-access).
+  // AE-133 only succeeded after the user set DSH session permission to 完全权限.
+  applyPermissionPreset(ctx, agent, config, log, tag)
+
   let turnError: unknown
   const stopErrorWatch = watchAgentError(agent, (error) => {
     turnError = error
@@ -251,6 +255,46 @@ function interruptAgent(agent: Agent, log: HarnessLogFn, tag: string): void {
       }
       return
     }
+  }
+}
+
+
+/**
+ * Apply the role's DSH permission preset via `ctx.permissionPresets.set(session, name)`.
+ * Bundles sandbox mode + approval policy (see @deepseek-ai/dsh-permission-presets):
+ * - workspace-write → sandbox workspace-write + approval ask (标准 / 工作区内修改)
+ * - danger-full-access → sandbox danger-full-access + approval never (完全权限)
+ */
+function applyPermissionPreset(
+  ctx: Context,
+  agent: Agent,
+  config: Config,
+  log: HarnessLogFn,
+  tag: string,
+): void {
+  const preset = (config.permissionPreset || '').trim()
+  if (!preset) return
+  try {
+    const host = hostCtx(ctx) as Context & {
+      permissionPresets?: { set?: (session: unknown, name: string) => void }
+      get?: (name: string) => { set?: (session: unknown, name: string) => void } | undefined
+    }
+    const svc = host.permissionPresets ?? host.get?.('permissionPresets')
+    if (!svc || typeof svc.set !== 'function') {
+      log(`${tag} permissionPresets service unavailable; preset=${preset} not applied`)
+      return
+    }
+    const session = (agent as { session?: unknown }).session
+    if (!session) {
+      log(`${tag} permission preset skipped (no agent.session) preset=${preset}`)
+      return
+    }
+    svc.set(session, preset)
+    log(`${tag} permission preset set preset=${preset}`)
+  } catch (err) {
+    log(
+      `${tag} permission preset failed preset=${preset}: ${err instanceof Error ? err.message : String(err)}`,
+    )
   }
 }
 

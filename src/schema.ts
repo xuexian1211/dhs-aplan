@@ -36,6 +36,7 @@ function build(z: Z): unknown {
     mountPlanMcp: z.boolean(),
     setSessionTitle: z.boolean(),
     renameExistingSession: z.boolean(),
+    permissionPreset: z.string(),
   })
   return z.object({
     enabled: b(d.enabled),
@@ -65,6 +66,7 @@ function build(z: Z): unknown {
     archiveSweepMinutes: n(d.archiveSweepMinutes),
     archiveGraceMinutes: n(d.archiveGraceMinutes),
     fixRuntimeAcl: b(d.fixRuntimeAcl),
+    permissionPreset: s(d.permissionPreset),
     roles: z.array(role).default([]).volatile(),
     /** Host-published JSON; GUI reads only. */
     runtimeStatus: s('[]'),
