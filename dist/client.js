@@ -3,9 +3,10 @@
 // Slot must use options.key = package name ("dhs-aplan"); plugin-manager matches
 // plugins.bundle.config via entryKey: pkg.name (keyed slot), not id.
 //
-// Layout (0.3.4): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
-// Per-role cards: Identity + Connection always visible; Run + Session collapse into
-// default-closed 「高级选项」 accordion (expand state per card, component state only).
+// Layout (0.3.5): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
+// Per-role cards: Identity + Connection (claimKeyEnv / mcpBearerEnv / postClaimComment) always visible;
+// mcpPath + mcpCommentTool + Run + Session collapse into default-closed 「高级选项」 accordion
+// (expand state per card, component state only).
 // cwd = combobox of known workspaces + 「浏览…」 via Desktop __DSH_DIRECTORY_PICKER__.
 window.__ModuleLoader__.load({
 	id: "dhs-aplan",
@@ -600,8 +601,6 @@ window.__ModuleLoader__.load({
 								children: [
 									jsx(RoleField, { label: t("claimKeyEnv"), value: role.claimKeyEnv, disabled, placeholder: "ITSAPLAN_KEY_DEV", hint: t("claimKeyEnvHint"), onChange: (v) => patch(index, { claimKeyEnv: v }) }),
 									jsx(RoleField, { label: t("mcpBearerEnv"), value: role.mcpBearerEnv, disabled, placeholder: t("mcpBearerEnvHint"), onChange: (v) => patch(index, { mcpBearerEnv: v }) }),
-									jsx(RoleField, { label: t("mcpPath"), value: role.mcpPath, disabled, placeholder: "/mcp", hint: t("mcpPathHint"), onChange: (v) => patch(index, { mcpPath: v }) }),
-									jsx(RoleField, { label: t("mcpCommentTool"), value: role.mcpCommentTool, disabled, placeholder: "create_issue_comment", hint: t("mcpCommentToolHint"), onChange: (v) => patch(index, { mcpCommentTool: v }) }),
 								],
 							}),
 							jsx(RoleBool, { label: t("postClaimComment"), value: role.postClaimComment !== false, disabled, onChange: (c) => patch(index, { postClaimComment: c }) }),
@@ -639,6 +638,13 @@ window.__ModuleLoader__.load({
 									? jsxs("div", {
 										style: { padding: "8px 10px 10px", display: "flex", flexDirection: "column", gap: 10 },
 										children: [
+											jsxs("div", {
+												style: GRID,
+												children: [
+													jsx(RoleField, { label: t("mcpPath"), value: role.mcpPath, disabled, placeholder: "/mcp", hint: t("mcpPathHint"), onChange: (v) => patch(index, { mcpPath: v }) }),
+													jsx(RoleField, { label: t("mcpCommentTool"), value: role.mcpCommentTool, disabled, placeholder: "create_issue_comment", hint: t("mcpCommentToolHint"), onChange: (v) => patch(index, { mcpCommentTool: v }) }),
+												],
+											}),
 											jsx("div", { style: SECTION, children: t("sectionRun") }),
 											jsxs("div", {
 												style: GRID,
