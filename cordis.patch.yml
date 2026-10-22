@@ -20,7 +20,7 @@
         cwd: "E:\\WorkSpaces\\aida700-ERP"
         provider: openai
         model: gpt-5.6-terra
-        reasoningEffort: ""
+        reasoningEffort: high
         sessionIdPrefix: dhs-aplan-
         reuseSessionPerIssue: true
         mountPlanMcp: true

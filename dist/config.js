@@ -24,7 +24,7 @@ export const defaultConfig = {
     cwd: '',
     provider: '',
     model: '',
-    reasoningEffort: '',
+    reasoningEffort: 'high',
     sessionIdPrefix: 'dhs-aplan-',
     reuseSessionPerIssue: true,
     disposeAfterRun: false,

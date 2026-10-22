@@ -3,7 +3,7 @@
 // Slot must use options.key = package name ("dhs-aplan"); plugin-manager matches
 // plugins.bundle.config via entryKey: pkg.name (keyed slot), not id.
 //
-// Layout (0.3.8): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
+// Layout (0.3.9): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
 // Per-role cards: Identity + Connection secret fields (claimKey/mcpBearer password) + status; claimKeyEnv/mcpBearerEnv in advanced;
 // mcpPath + mcpCommentTool + Run + Session collapse into default-closed 「高级选项」 accordion
 // (expand state per card, component state only).
@@ -122,8 +122,8 @@ window.__ModuleLoader__.load({
 			statusTitle: "连接状态",
 			statusHint: "暂停 = 关闭该角色「启用」。Key 存在于 DSH 凭据库（%APPDATA%\\dsh-desktop\\harness\\.credentials.yaml），不进 cordis.patch。",
 			pauseRole: "启用（关闭=暂停领取）",
-			reasoningEffort: "推理强度",
-			reasoningEffortHint: "写入 AgentOptions.reasoningEffort；留空 = 模型默认。取值视模型而定（off/minimal/low/medium/high/xhigh）。",
+			reasoningEffort: "推理等级",
+			reasoningEffortHint: "写入 AgentOptions.reasoningEffort。默认 high。取值依模型而定（off/minimal/low/medium/high/xhigh）。",
 			archiveDoneThreads: "自动归档（完成/取消的 Issue 会话）",
 			archiveDoneThreadsHint: "CodexHub 对等项。DSH 尚无按 Plan 看板列归档会话的 API；开启后仅打日志（可先开「仅演练」）。",
 			archiveDryRun: "归档仅演练（只记日志）",
@@ -175,8 +175,8 @@ window.__ModuleLoader__.load({
 			statusTitle: "Connection status",
 			statusHint: "Pause = turn off role Enabled. Keys live in the DSH credentials store, not cordis.patch.",
 			pauseRole: "Enabled (off = pause claiming)",
-			reasoningEffort: "Reasoning effort",
-			reasoningEffortHint: "Passed as AgentOptions.reasoningEffort; empty = model default.",
+			reasoningEffort: "Reasoning level",
+			reasoningEffortHint: "Passed as AgentOptions.reasoningEffort; default high (empty = model default).",
 			archiveDoneThreads: "Auto-archive (completed/canceled issue sessions)",
 			archiveDoneThreadsHint: "CodexHub parity. DSH has no Plan-column archive API yet; enabling only logs (prefer dry-run first).",
 			archiveDryRun: "Archive dry-run (log only)",
@@ -234,10 +234,22 @@ window.__ModuleLoader__.load({
 			borderRadius: 6,
 			border: "1px solid var(--dsw-alias-border-primary, #ccc)",
 			background: "var(--dsw-alias-background-primary, transparent)",
-			color: "inherit",
+			color: "var(--dsw-alias-label-primary, inherit)",
 			width: "100%",
 			boxSizing: "border-box",
 		};
+		/** Native <select> popup: force dark-compatible option colors (Windows light popup + inherit light text = invisible). */
+		const SELECT = {
+			...INPUT,
+			colorScheme: "dark",
+		};
+		const OPTION = {
+			backgroundColor: "var(--dsw-alias-background-primary, #1a1a1a)",
+			color: "var(--dsw-alias-label-primary, #e8e8e8)",
+		};
+		function selectOption(value, label) {
+			return jsx("option", { value, style: OPTION, children: label });
+		}
 		const ACTIONS = { display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 };
 		const HELP_BADGE = {
 			display: "inline-flex",
@@ -339,7 +351,7 @@ window.__ModuleLoader__.load({
 				mode: "harness",
 				provider: "",
 				model: "",
-				reasoningEffort: "",
+				reasoningEffort: "high",
 				sessionIdPrefix: "",
 				reuseSessionPerIssue: undefined,
 				setSessionTitle: undefined,
@@ -508,7 +520,7 @@ window.__ModuleLoader__.load({
 							}),
 							jsx("datalist", {
 								id: listId,
-								children: options.map((p) => jsx("option", { value: p }, p)),
+								children: options.map((p) => jsx("option", { value: p, style: OPTION }, p)),
 							}),
 							jsx(P.Button, {
 								variant: "secondary",
@@ -569,23 +581,24 @@ window.__ModuleLoader__.load({
 		}
 
 		function EffortSelect(props) {
+			const val = props.value === "" || props.value == null ? "high" : props.value;
 			return jsxs("label", {
 				style: FIELD,
 				children: [
 					jsx("span", { style: LABEL, children: props.label }),
 					jsxs("select", {
-						style: INPUT,
-						value: props.value || "",
+						style: SELECT,
+						value: val,
 						disabled: props.disabled,
 						onChange: (e) => props.onChange(e.target.value),
 						children: [
-							jsx("option", { value: "", children: "默认（模型）" }),
-							jsx("option", { value: "off", children: "off" }),
-							jsx("option", { value: "minimal", children: "minimal" }),
-							jsx("option", { value: "low", children: "low" }),
-							jsx("option", { value: "medium", children: "medium" }),
-							jsx("option", { value: "high", children: "high" }),
-							jsx("option", { value: "xhigh", children: "xhigh" }),
+							selectOption("", "模型默认"),
+							selectOption("off", "off"),
+							selectOption("minimal", "minimal"),
+							selectOption("low", "low"),
+							selectOption("medium", "medium"),
+							selectOption("high", "high"),
+							selectOption("xhigh", "xhigh"),
 						],
 					}),
 					props.hint ? jsx("span", { style: { ...LABEL, fontSize: 11, opacity: 0.85 }, children: props.hint }) : null,
@@ -643,13 +656,13 @@ function RoleField(props) {
 						],
 					}),
 					jsxs("select", {
-						style: INPUT,
+						style: SELECT,
 						value: props.value === "dry-run" ? "dry-run" : "harness",
 						disabled: props.disabled,
 						onChange: (e) => props.onChange(e.target.value),
 						children: [
-							jsx("option", { value: "harness", children: "harness" }),
-							jsx("option", { value: "dry-run", children: "dry-run" }),
+							selectOption("harness", "harness"),
+							selectOption("dry-run", "dry-run"),
 						],
 					}),
 				],
@@ -665,7 +678,7 @@ function RoleField(props) {
 				children: [
 					jsx("span", { style: LABEL, children: props.label }),
 					jsxs("select", {
-						style: INPUT,
+						style: SELECT,
 						value: selectVal,
 						disabled: props.disabled,
 						onChange: (e) => {
@@ -673,9 +686,9 @@ function RoleField(props) {
 							props.onChange(v === "inherit" ? undefined : v === "true");
 						},
 						children: [
-							jsx("option", { value: "inherit", children: "继承「全站默认」" }),
-							jsx("option", { value: "true", children: "是" }),
-							jsx("option", { value: "false", children: "否" }),
+							selectOption("inherit", "继承（全站默认）"),
+							selectOption("true", "是"),
+							selectOption("false", "否"),
 						],
 					}),
 				],
@@ -844,7 +857,6 @@ function RoleField(props) {
 													jsx(RoleField, { label: t("mcpBearerEnv"), value: role.mcpBearerEnv, disabled, placeholder: t("mcpBearerEnvHint"), onChange: (v) => patch(index, { mcpBearerEnv: v }) }),
 												],
 											}),
-											jsx(EffortSelect, { label: t("reasoningEffort"), value: role.reasoningEffort, hint: t("reasoningEffortHint"), disabled, onChange: (v) => patch(index, { reasoningEffort: v }) }),
 											jsx("div", { style: SECTION, children: t("sectionRun") }),
 											jsxs("div", {
 												style: GRID,
@@ -857,8 +869,9 @@ function RoleField(props) {
 														listId: "dhs-aplan-cwd-list-" + cardKey,
 														onChange: (v) => patch(index, { cwd: v }),
 													}) }),
-													jsx(RoleField, { label: t("provider"), value: role.provider, disabled, placeholder: t("providerHint"), onChange: (v) => patch(index, { provider: v }) }),
+													jsx("div", { style: { gridColumn: "1 / -1" }, children: jsx(RoleField, { label: t("provider"), value: role.provider, disabled, placeholder: t("providerHint"), onChange: (v) => patch(index, { provider: v }) }) }),
 													jsx(RoleField, { label: t("model"), value: role.model, disabled, placeholder: t("modelHint"), onChange: (v) => patch(index, { model: v }) }),
+													jsx(EffortSelect, { label: t("reasoningEffort"), value: role.reasoningEffort, hint: t("reasoningEffortHint"), disabled, onChange: (v) => patch(index, { reasoningEffort: v }) }),
 												],
 											}),
 											jsx(RoleBool, { label: t("mountPlanMcp"), value: role.mountPlanMcp !== false, disabled, onChange: (c) => patch(index, { mountPlanMcp: c }) }),

@@ -24,7 +24,7 @@ export interface RoleConfig {
   cwd?: string
   provider?: string
   model?: string
-  /** Adapter-owned reasoning effort id (off/minimal/low/medium/high/xhigh). Empty = model default. */
+  /** Adapter-owned reasoning effort id (off/minimal/low/medium/high/xhigh). Default high; empty = model default. */
   reasoningEffort?: string
   mode?: 'dry-run' | 'harness'
   sessionIdPrefix?: string
@@ -77,7 +77,7 @@ export interface Config {
   /** Optional provider / model override. Empty = profile default. */
   provider: string
   model: string
-  /** Adapter-owned reasoning effort; empty = provider/model default. */
+  /** Adapter-owned reasoning effort; default high. Empty string = provider/model default. */
   reasoningEffort: string
   /** Prefix for generated session ids. */
   sessionIdPrefix: string
@@ -130,7 +130,7 @@ export const defaultConfig: Config = {
   cwd: '',
   provider: '',
   model: '',
-  reasoningEffort: '',
+  reasoningEffort: 'high',
   sessionIdPrefix: 'dhs-aplan-',
   reuseSessionPerIssue: true,
   disposeAfterRun: false,
