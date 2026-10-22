@@ -3,10 +3,10 @@
 // Slot must use options.key = package name ("dhs-aplan"); plugin-manager matches
 // plugins.bundle.config via entryKey: pkg.name (keyed slot), not id.
 //
-// Layout (0.3.3): GLOBAL top = baseUrl + intervals + enabled +「全站默认」session toggles.
-// Per-role cards hold claim/MCP keys, mode/cwd/provider/model, sessionIdPrefix, and
-// optional per-role session/MCP overrides. Empty roles[] shows one editable default
-// card that writes roles[0] (single model).
+// Layout (0.3.4): GLOBAL top = baseUrl + intervals + enabled + site-default session toggles.
+// Per-role cards: Identity + Connection always visible; Run + Session collapse into
+// default-closed 「高级选项」 accordion (expand state per card, component state only).
+// cwd = combobox of known workspaces + 「浏览…」 via Desktop __DSH_DIRECTORY_PICKER__.
 window.__ModuleLoader__.load({
 	id: "dhs-aplan",
 	factory: (require) => {
@@ -14,6 +14,8 @@ window.__ModuleLoader__.load({
 		var exports = module.exports;
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 		const { jsx, jsxs } = require("react/jsx-runtime");
+		const React = require("react");
+		const { useState, useMemo, useRef } = React;
 		const P = require("@deepseek-ai/dsh-client-ui-primitives");
 
 		const NS = "settings.dhsAplan";
@@ -65,6 +67,10 @@ window.__ModuleLoader__.load({
 			sectionConn: "连接与 Key",
 			sectionRun: "运行",
 			sectionSession: "会话（本角色）",
+			sectionAdvanced: "高级选项",
+			cwdBrowse: "浏览…",
+			cwdComboHint: "下拉有已知工作区，也可输入或点浏览；修改只影响新会话。",
+			cwdBrowseUnavailable: "当前环境无法打开系统文件夹选择器，请手动输入绝对路径。",
 			siteDefaults: "全站默认",
 			invalid: "格式不对", invalidMode: "只能是 harness 或 dry-run", invalidJson: "需要 JSON 数组",
 			overridden: "已覆盖", reset: "恢复默认",
@@ -89,6 +95,10 @@ window.__ModuleLoader__.load({
 			sectionConn: "Connection & keys",
 			sectionRun: "Run",
 			sectionSession: "Session (this role)",
+			sectionAdvanced: "Advanced",
+			cwdBrowse: "Browse…",
+			cwdComboHint: "Dropdown lists known workspaces; type freely or Browse. Changes apply to new sessions only.",
+			cwdBrowseUnavailable: "No native folder picker here — type an absolute path.",
 			siteDefaults: "Site defaults",
 			save: "Save", saving: "Saving…", reset: "Reset", overridden: "Overridden",
 			groupGlobal: "Global", groupSiteSession: "Site defaults · Session", groupRoles: "Roles",
@@ -250,6 +260,181 @@ window.__ModuleLoader__.load({
 			};
 		}
 
+
+		const CWD_HISTORY_KEY = "dhs-aplan-cwd-history";
+		const CWD_HISTORY_MAX = 20;
+		/** Soft-filled from apply() when uiWorkspace is available. */
+		let knownWorkspacePaths = [];
+
+		function loadCwdHistory() {
+			try {
+				const raw = localStorage.getItem(CWD_HISTORY_KEY);
+				if (!raw) return [];
+				const v = JSON.parse(raw);
+				return Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim()) : [];
+			} catch {
+				return [];
+			}
+		}
+
+		function pushCwdHistory(cwd) {
+			const p = String(cwd || "").trim();
+			if (!p) return;
+			try {
+				const next = [p].concat(loadCwdHistory().filter((x) => x !== p)).slice(0, CWD_HISTORY_MAX);
+				localStorage.setItem(CWD_HISTORY_KEY, JSON.stringify(next));
+			} catch (_) {}
+		}
+
+		function collectKnownCwds(extra) {
+			const seen = new Set();
+			const out = [];
+			const add = (p) => {
+				const s = String(p || "").trim();
+				if (!s || seen.has(s)) return;
+				seen.add(s);
+				out.push(s);
+			};
+			for (const p of knownWorkspacePaths) add(p);
+			for (const p of loadCwdHistory()) add(p);
+			if (extra) add(extra);
+			return out;
+		}
+
+		function refreshKnownWorkspaces(uiWorkspace) {
+			try {
+				const snap = uiWorkspace && uiWorkspace.workspaces && uiWorkspace.workspaces.list
+					? uiWorkspace.workspaces.list.getSnapshot()
+					: null;
+				const items = snap && Array.isArray(snap.items) ? snap.items : [];
+				knownWorkspacePaths = items
+					.map((it) => (it && typeof it.path === "string" ? it.path.trim() : ""))
+					.filter(Boolean);
+			} catch (_) {
+				knownWorkspacePaths = [];
+			}
+		}
+
+		/**
+		 * Desktop: window.__DSH_DIRECTORY_PICKER__.pick() → native OS folder dialog (IPC directory-picker:open).
+		 * Fallback: <input webkitdirectory> + __DSH_HOST_PATHS__.pathFor(file) for absolute path.
+		 * @returns {Promise<string|null>}
+		 */
+		async function pickDirectoryNative() {
+			const desktop = typeof globalThis !== "undefined" ? globalThis.__DSH_DIRECTORY_PICKER__ : undefined;
+			if (desktop && typeof desktop.pick === "function") {
+				try {
+					const path = await desktop.pick();
+					return typeof path === "string" && path ? path : null;
+				} catch (err) {
+					console.warn("[dhs-aplan] __DSH_DIRECTORY_PICKER__.pick failed:", err);
+				}
+			}
+			return pickDirectoryViaWebkit();
+		}
+
+		function pickDirectoryViaWebkit() {
+			return new Promise((resolve) => {
+				try {
+					const input = document.createElement("input");
+					input.type = "file";
+					input.setAttribute("webkitdirectory", "");
+					input.setAttribute("directory", "");
+					input.style.display = "none";
+					const cleanup = () => { try { input.remove(); } catch (_) {} };
+					input.addEventListener("change", () => {
+						const file = input.files && input.files[0];
+						cleanup();
+						if (!file) { resolve(null); return; }
+						const host = typeof globalThis !== "undefined" ? globalThis.__DSH_HOST_PATHS__ : undefined;
+						let abs = null;
+						if (host && typeof host.pathFor === "function") {
+							try { abs = host.pathFor(file); } catch (_) {}
+						}
+						if (typeof abs === "string" && abs) {
+							// file path → parent directory (folder the user picked)
+							const norm = abs.replace(/\\/g, "/");
+							const slash = Math.max(norm.lastIndexOf("/"), abs.lastIndexOf("\\"));
+							const dir = slash > 0 ? abs.slice(0, slash) : abs;
+							// If webkitRelativePath is "folder/file", strip that relative suffix for true root
+							const rel = file.webkitRelativePath || "";
+							if (rel) {
+								const top = rel.split(/[\\/]/)[0];
+								const idx = dir.toLowerCase().lastIndexOf(top.toLowerCase());
+								if (idx >= 0) {
+									resolve(dir.slice(0, idx + top.length));
+									return;
+								}
+							}
+							resolve(dir);
+							return;
+						}
+						resolve(null);
+					});
+					input.addEventListener("cancel", () => { cleanup(); resolve(null); });
+					document.body.appendChild(input);
+					input.click();
+				} catch (err) {
+					console.warn("[dhs-aplan] webkitdirectory fallback failed:", err);
+					resolve(null);
+				}
+			});
+		}
+
+		function CwdCombobox(props) {
+			const { t, value, disabled, onChange } = props;
+			const listId = props.listId || "dhs-aplan-cwd-list";
+			const options = useMemo(() => collectKnownCwds(value), [value, knownWorkspacePaths.join("\0")]);
+			const browsing = useRef(false);
+			const onBrowse = async () => {
+				if (disabled || browsing.current) return;
+				browsing.current = true;
+				try {
+					const picked = await pickDirectoryNative();
+					if (picked) {
+						pushCwdHistory(picked);
+						onChange(picked);
+					} else if (!globalThis.__DSH_DIRECTORY_PICKER__ && !globalThis.__DSH_HOST_PATHS__) {
+						console.warn("[dhs-aplan]", t("cwdBrowseUnavailable"));
+					}
+				} finally {
+					browsing.current = false;
+				}
+			};
+			return jsxs("label", {
+				style: FIELD,
+				children: [
+					jsx("span", { style: LABEL, children: t("cwd") }),
+					jsxs("div", {
+						style: { display: "flex", gap: 6, alignItems: "center" },
+						children: [
+							jsx("input", {
+								style: { ...INPUT, flex: 1 },
+								list: listId,
+								value: value,
+								disabled,
+								placeholder: "可选，留空 = 不设 cwd",
+								onChange: (e) => onChange(e.target.value),
+								onBlur: (e) => pushCwdHistory(e.target.value),
+							}),
+							jsx("datalist", {
+								id: listId,
+								children: options.map((p) => jsx("option", { value: p }, p)),
+							}),
+							jsx(P.Button, {
+								variant: "secondary",
+								size: "sm",
+								disabled,
+								onClick: () => { void onBrowse(); },
+								children: t("cwdBrowse"),
+							}),
+						],
+					}),
+					jsx("span", { style: { ...LABEL, fontSize: 11, opacity: 0.85 }, children: t("cwdComboHint") }),
+				],
+			});
+		}
+
 		function RoleField(props) {
 			return jsxs("label", {
 				style: FIELD,
@@ -345,6 +530,8 @@ window.__ModuleLoader__.load({
 			const virtual = roles.length === 0;
 			const display = virtual ? [blankRole()] : roles;
 			const commit = (next) => onEdit(serializeRoles(next));
+			// Expand state per card (component state only — not persisted).
+			const [advancedOpen, setAdvancedOpen] = useState({});
 
 			const patch = (index, patchObj) => {
 				if (virtual) {
@@ -359,9 +546,14 @@ window.__ModuleLoader__.load({
 			};
 			const addRole = () => commit((virtual ? [] : roles).concat([blankRole()]));
 			const fillTemplate = () => commit(FIVE_ROLE_TEMPLATE.map((r) => ({ ...blankRole(), ...r })));
+			const toggleAdvanced = (cardKey) => {
+				setAdvancedOpen((prev) => ({ ...prev, [cardKey]: !prev[cardKey] }));
+			};
 
-			const rows = display.map((role, index) =>
-				jsxs(
+			const rows = display.map((role, index) => {
+				const cardKey = String(role.key || "") || ("#" + index);
+				const advOpen = !!advancedOpen[cardKey];
+				return jsxs(
 					"div",
 					{
 						style: ROW_STYLE,
@@ -413,33 +605,78 @@ window.__ModuleLoader__.load({
 								],
 							}),
 							jsx(RoleBool, { label: t("postClaimComment"), value: role.postClaimComment !== false, disabled, onChange: (c) => patch(index, { postClaimComment: c }) }),
-							jsx("div", { style: SECTION, children: t("sectionRun") }),
-							jsxs("div", {
-								style: GRID,
-								children: [
-									jsx(ModeSelect, { label: t("mode"), value: role.mode, hint: t("modeHint"), disabled, onChange: (v) => patch(index, { mode: v }) }),
-									jsx(RoleField, { label: t("cwd"), value: role.cwd, disabled, placeholder: "可选，留空 = 不设 cwd", hint: t("cwdHint"), onChange: (v) => patch(index, { cwd: v }) }),
-									jsx(RoleField, { label: t("provider"), value: role.provider, disabled, placeholder: t("providerHint"), onChange: (v) => patch(index, { provider: v }) }),
-									jsx(RoleField, { label: t("model"), value: role.model, disabled, placeholder: t("modelHint"), onChange: (v) => patch(index, { model: v }) }),
-								],
-							}),
-							jsx(RoleBool, { label: t("mountPlanMcp"), value: role.mountPlanMcp !== false, disabled, onChange: (c) => patch(index, { mountPlanMcp: c }) }),
-							jsx("div", { style: SECTION, children: t("sectionSession") }),
-							jsxs("div", {
-								style: GRID,
-								children: [
-									jsx(RoleField, { label: t("sessionIdPrefix"), value: role.sessionIdPrefix, disabled, placeholder: "dhs-aplan-dev-", onChange: (v) => patch(index, { sessionIdPrefix: v }) }),
-									jsx(RoleBoolInherit, { label: t("reuseSessionPerIssue"), value: role.reuseSessionPerIssue, disabled, onChange: (v) => patch(index, { reuseSessionPerIssue: v }) }),
-									jsx(RoleBoolInherit, { label: t("setSessionTitle"), value: role.setSessionTitle, disabled, onChange: (v) => patch(index, { setSessionTitle: v }) }),
-									jsx(RoleBoolInherit, { label: t("renameExistingSession"), value: role.renameExistingSession, disabled, onChange: (v) => patch(index, { renameExistingSession: v }) }),
-									jsx(RoleBoolInherit, { label: t("disposeAfterRun"), value: role.disposeAfterRun, disabled, onChange: (v) => patch(index, { disposeAfterRun: v }) }),
-								],
-							}),
+							// Advanced accordion: 运行 + 会话（本角色）, default collapsed
+						jsxs("div", {
+							style: {
+								border: "1px solid var(--dsw-alias-border-primary, #ddd)",
+								borderRadius: 6,
+								marginTop: 4,
+								overflow: "hidden",
+							},
+							children: [
+								jsx("button", {
+									type: "button",
+									disabled: false,
+									onClick: () => toggleAdvanced(cardKey),
+									"aria-expanded": advOpen,
+									style: {
+										display: "flex",
+										alignItems: "center",
+										justifyContent: "space-between",
+										width: "100%",
+										padding: "8px 10px",
+										fontSize: 12,
+										fontWeight: 600,
+										color: "var(--dsw-alias-label-secondary, #666)",
+										background: "var(--dsw-alias-interactive-bg-hover, rgba(0,0,0,.03))",
+										border: "none",
+										cursor: "pointer",
+										textAlign: "left",
+									},
+									children: (advOpen ? "▾ " : "▸ ") + t("sectionAdvanced"),
+								}),
+								advOpen
+									? jsxs("div", {
+										style: { padding: "8px 10px 10px", display: "flex", flexDirection: "column", gap: 10 },
+										children: [
+											jsx("div", { style: SECTION, children: t("sectionRun") }),
+											jsxs("div", {
+												style: GRID,
+												children: [
+													jsx(ModeSelect, { label: t("mode"), value: role.mode, hint: t("modeHint"), disabled, onChange: (v) => patch(index, { mode: v }) }),
+													jsx("div", { style: { gridColumn: "1 / -1" }, children: jsx(CwdCombobox, {
+														t,
+														value: role.cwd,
+														disabled,
+														listId: "dhs-aplan-cwd-list-" + cardKey,
+														onChange: (v) => patch(index, { cwd: v }),
+													}) }),
+													jsx(RoleField, { label: t("provider"), value: role.provider, disabled, placeholder: t("providerHint"), onChange: (v) => patch(index, { provider: v }) }),
+													jsx(RoleField, { label: t("model"), value: role.model, disabled, placeholder: t("modelHint"), onChange: (v) => patch(index, { model: v }) }),
+												],
+											}),
+											jsx(RoleBool, { label: t("mountPlanMcp"), value: role.mountPlanMcp !== false, disabled, onChange: (c) => patch(index, { mountPlanMcp: c }) }),
+											jsx("div", { style: SECTION, children: t("sectionSession") }),
+											jsxs("div", {
+												style: GRID,
+												children: [
+													jsx(RoleField, { label: t("sessionIdPrefix"), value: role.sessionIdPrefix, disabled, placeholder: "dhs-aplan-dev-", onChange: (v) => patch(index, { sessionIdPrefix: v }) }),
+													jsx(RoleBoolInherit, { label: t("reuseSessionPerIssue"), value: role.reuseSessionPerIssue, disabled, onChange: (v) => patch(index, { reuseSessionPerIssue: v }) }),
+													jsx(RoleBoolInherit, { label: t("setSessionTitle"), value: role.setSessionTitle, disabled, onChange: (v) => patch(index, { setSessionTitle: v }) }),
+													jsx(RoleBoolInherit, { label: t("renameExistingSession"), value: role.renameExistingSession, disabled, onChange: (v) => patch(index, { renameExistingSession: v }) }),
+													jsx(RoleBoolInherit, { label: t("disposeAfterRun"), value: role.disposeAfterRun, disabled, onChange: (v) => patch(index, { disposeAfterRun: v }) }),
+												],
+											}),
+										],
+									})
+									: null,
+							],
+						}),
 						],
 					},
 					"role-" + index,
-				),
-			);
+				);
+			});
 
 			return jsxs("div", {
 				style: { marginTop: 4 },
@@ -586,6 +823,30 @@ window.__ModuleLoader__.load({
 		function apply(ctx) {
 			const t = ctx.locale.bind(NS);
 			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "dhs-aplan: dictionaries");
+
+			// Soft-read DSH workspace registry paths for cwd datalist (no hard inject).
+			try {
+				const uiWs = ctx.reflect && typeof ctx.reflect.get === "function"
+					? ctx.reflect.get("uiWorkspace", false)
+					: null;
+				if (uiWs) refreshKnownWorkspaces(uiWs);
+			} catch (_) {}
+			if (typeof ctx.inject === "function") {
+				ctx.effect(
+					() =>
+						ctx.inject(["uiWorkspace"], (c) => {
+							refreshKnownWorkspaces(c.uiWorkspace);
+							let unsub = null;
+							try {
+								if (c.uiWorkspace.workspaces && c.uiWorkspace.workspaces.list && typeof c.uiWorkspace.workspaces.list.subscribe === "function") {
+									unsub = c.uiWorkspace.workspaces.list.subscribe(() => refreshKnownWorkspaces(c.uiWorkspace));
+								}
+							} catch (_) {}
+							return () => { try { unsub && unsub(); } catch (_) {} };
+						}),
+					"dhs-aplan: workspaces",
+				);
+			}
 
 			let card = null;
 			const attachForm = (forms) => {
